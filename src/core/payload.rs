@@ -2,6 +2,23 @@
 
 use super::*;
 
+use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::{self, Cursor, Read, Write};
+use std::os::windows::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use anyhow::{Context, Result, bail};
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
+use walkdir::WalkDir;
+use windows::Win32::Storage::FileSystem::{
+    MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+};
+use windows::core::PCWSTR;
+use zip::ZipArchive;
+
 #[derive(Debug, Clone)]
 pub(crate) struct ItemStats {
     pub(crate) size: u64,

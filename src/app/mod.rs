@@ -24,11 +24,18 @@ use crate::core::{
 };
 use crate::vnt_platform::{VntEvent, VntLaunchOptions, VntSession};
 
+mod actions;
 mod background;
 mod controller;
 mod diagnostics;
+mod dialogs;
+mod drive_scan;
 mod hotkey;
+mod messages;
 mod server_list;
+mod servers;
+mod target;
+mod vnt_controller;
 mod vnt_rows;
 
 use background::spawn_port_thread;

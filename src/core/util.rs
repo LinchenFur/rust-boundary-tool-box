@@ -2,6 +2,17 @@
 
 use super::*;
 
+use std::ffi::OsStr;
+use std::fs;
+use std::os::windows::process::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+use anyhow::Result;
+use chrono::Local;
+
+use crate::win::{parse_hotkey_text, watch_window_by_pid};
+
 /// 供 UI 和日志使用的本地时间戳。
 pub fn now_text() -> String {
     Local::now().format("%Y-%m-%d %H:%M:%S").to_string()

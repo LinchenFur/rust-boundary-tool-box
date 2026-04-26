@@ -3,6 +3,14 @@
 use super::filesystem::delete_path;
 use super::*;
 
+use std::collections::HashSet;
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use regex::Regex;
+
 /// 清理 Engine.ini 后折叠连续空行。
 fn normalize_blank_lines(lines: &[String]) -> Vec<String> {
     let mut normalized = Vec::new();

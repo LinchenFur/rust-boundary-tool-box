@@ -3,6 +3,13 @@
 use super::util::hidden_taskkill_command;
 use super::*;
 
+use std::path::Path;
+use std::process::Stdio;
+
+use anyhow::{Context, Result, bail};
+use netstat2::{AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, TcpState, get_sockets_info};
+use sysinfo::System;
+
 /// 为弹窗和日志生成紧凑的进程摘要字符串。
 pub fn summarize_runtime_processes(snapshot: &RuntimeSnapshot) -> String {
     let parts = [

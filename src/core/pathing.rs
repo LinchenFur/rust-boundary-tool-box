@@ -2,6 +2,18 @@
 
 use super::*;
 
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+
+use anyhow::{Result, bail};
+use regex::Regex;
+use winreg::RegKey;
+use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+
 /// 列出当前 Windows 上存在的盘符根目录。
 pub fn list_available_drives() -> Vec<PathBuf> {
     ('A'..='Z')

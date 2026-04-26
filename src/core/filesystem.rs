@@ -1,6 +1,11 @@
 //! 文件系统与 JSON 元数据读写工具。
 
-use super::*;
+use std::fs;
+use std::path::Path;
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use walkdir::WalkDir;
 
 /// 读取可选 JSON 元数据；数据损坏时作为阻塞错误处理。
 pub(crate) fn read_json_file<T>(path: &Path) -> Result<Option<T>>
