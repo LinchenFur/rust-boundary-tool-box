@@ -1,3 +1,9 @@
+//! Native VNT integration used by the "联机" page.
+//!
+//! The vendored VNT v2 source is linked as Rust crates. This wrapper keeps the
+//! UI-facing API small: start with options, emit snapshots/events, and stop
+//! through a oneshot channel. No web UI or webview is involved.
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
@@ -12,6 +18,7 @@ use vnt_core::tunnel_core::server::transport::config::ProtocolAddress;
 use vnt_core::utils::task_control::TaskGroupManager;
 use vnt_ipc as vnt_core;
 
+/// User-provided launch options for the VNT core.
 #[derive(Debug, Clone)]
 pub struct VntLaunchOptions {
     pub server_text: String,
@@ -23,6 +30,7 @@ pub struct VntLaunchOptions {
     pub no_punch: bool,
 }
 
+/// One peer/client row displayed in the UI.
 #[derive(Debug, Clone)]
 pub struct VntPeer {
     pub name: String,
@@ -31,6 +39,7 @@ pub struct VntPeer {
     pub online: bool,
 }
 
+/// UI snapshot of the current VNT network state.
 #[derive(Debug, Clone)]
 pub struct VntSnapshot {
     pub running: bool,
@@ -45,6 +54,7 @@ pub struct VntSnapshot {
     pub peers: Vec<VntPeer>,
 }
 
+/// Events emitted from the VNT worker thread to the Slint controller.
 #[derive(Debug, Clone)]
 pub enum VntEvent {
     Snapshot(VntSnapshot),
@@ -54,11 +64,16 @@ pub enum VntEvent {
 
 type EventSink = Arc<dyn Fn(VntEvent) + Send + Sync + 'static>;
 
+/// Running VNT session handle.
+///
+/// Dropping this object requests shutdown, which prevents the native core from
+/// surviving after the window closes.
 pub struct VntSession {
     stop_tx: Option<oneshot::Sender<()>>,
 }
 
 impl VntSession {
+    /// Starts VNT on a dedicated OS thread with its own Tokio runtime.
     pub fn start(options: VntLaunchOptions, sink: EventSink) -> Result<Self> {
         validate_options(&options)?;
         let (stop_tx, stop_rx) = oneshot::channel();
@@ -79,6 +94,7 @@ impl VntSession {
         })
     }
 
+    /// Requests graceful shutdown. Final state arrives through VntEvent::Stopped.
     pub fn stop(&mut self) {
         if let Some(stop_tx) = self.stop_tx.take() {
             let _ = stop_tx.send(());
@@ -92,6 +108,7 @@ impl Drop for VntSession {
     }
 }
 
+/// Disconnected state used for first render and after shutdown.
 pub fn idle_snapshot() -> VntSnapshot {
     VntSnapshot {
         running: false,
@@ -112,6 +129,7 @@ pub fn idle_snapshot() -> VntSnapshot {
     }
 }
 
+/// Splits a user-entered server list across common separators.
 pub fn split_servers(raw: &str) -> Vec<String> {
     raw.split(['\n', '\r', '\t', ' ', ',', ';', '，', '；'])
         .map(str::trim)
@@ -120,6 +138,7 @@ pub fn split_servers(raw: &str) -> Vec<String> {
         .collect()
 }
 
+/// Validates required fields before any background thread is spawned.
 fn validate_options(options: &VntLaunchOptions) -> Result<()> {
     if split_servers(&options.server_text).is_empty() {
         bail!("请填写 VNT 服务器地址。");
@@ -133,6 +152,7 @@ fn validate_options(options: &VntLaunchOptions) -> Result<()> {
     Ok(())
 }
 
+/// Owns the Tokio runtime so the Slint UI thread stays synchronous.
 fn run_vnt_thread(
     options: VntLaunchOptions,
     stop_rx: oneshot::Receiver<()>,
@@ -147,6 +167,7 @@ fn run_vnt_thread(
     runtime.block_on(run_vnt(options, stop_rx, sink))
 }
 
+/// Runs the VNT core lifecycle: configure, register, start TUN, poll status.
 async fn run_vnt(
     options: VntLaunchOptions,
     mut stop_rx: oneshot::Receiver<()>,
@@ -162,6 +183,7 @@ async fn run_vnt(
     }));
 
     if !options.no_tun {
+        // VNT loads wintun.dll from the process directory on Windows.
         extract_wintun_dll().context("准备 wintun.dll 失败")?;
     }
 
@@ -221,6 +243,8 @@ async fn run_vnt(
     };
 
     if !network_manager.is_no_tun() {
+        // Registration returns the virtual IP; only then can the local adapter
+        // be started and assigned its network address.
         sink(VntEvent::Snapshot(VntSnapshot {
             busy: true,
             status: "创建网卡".to_string(),
@@ -250,6 +274,7 @@ async fn run_vnt(
     let status_api = api.clone();
     let status_sink = sink.clone();
     let status_handle = tokio::spawn(async move {
+        // Poll VNT API periodically and keep the UI model current.
         loop {
             status_sink(VntEvent::Snapshot(snapshot_from_api(
                 &status_api,
@@ -275,6 +300,8 @@ async fn run_vnt(
         }
     }
 
+    // Stop the polling task before dropping NetworkManager so no snapshot reads
+    // race with teardown.
     status_handle.abort();
     let _ = status_handle.await;
     drop(network_manager);
@@ -283,6 +310,7 @@ async fn run_vnt(
     Ok(())
 }
 
+/// Converts UI options into the config expected by the VNT core.
 fn build_config(options: &VntLaunchOptions) -> Result<Config> {
     let server_addr = split_servers(&options.server_text)
         .into_iter()
@@ -306,6 +334,7 @@ fn build_config(options: &VntLaunchOptions) -> Result<Config> {
         device_name: default_device_name(),
         tun_name: Some("boundary-vnt".to_string()),
         password,
+        // The bundled VNT defaults use this mode for public community servers.
         cert_mode: CertValidationMode::InsecureSkipVerification,
         no_punch: options.no_punch,
         compress: options.compress,
@@ -315,6 +344,7 @@ fn build_config(options: &VntLaunchOptions) -> Result<Config> {
     })
 }
 
+/// Reads live state from VNT's API and shapes it for the UI.
 fn snapshot_from_api(
     api: &vnt_core::api::VntApi,
     busy: bool,
@@ -347,6 +377,8 @@ fn snapshot_from_api(
         clients
             .into_iter()
             .map(|client| {
+                // Route/RTT are best-effort diagnostics; missing values should
+                // not make the whole snapshot fail.
                 let rtt = api
                     .get_rtt(&client.ip)
                     .map(|value| format!("{value} ms"))
@@ -424,6 +456,7 @@ fn snapshot_from_api(
     }
 }
 
+/// Stable device display name used in the VNT network.
 fn default_device_name() -> String {
     let host = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
@@ -432,6 +465,7 @@ fn default_device_name() -> String {
 }
 
 #[cfg(windows)]
+/// Extracts the bundled wintun.dll next to the executable when TUN mode is used.
 fn extract_wintun_dll() -> Result<()> {
     #[cfg(target_arch = "x86_64")]
     const WINTUN_DLL: &[u8] = include_bytes!("../vendor/vnt/dll/amd64/wintun.dll");
@@ -455,6 +489,7 @@ fn extract_wintun_dll() -> Result<()> {
 }
 
 #[cfg(not(windows))]
+/// Non-Windows builds do not need a bundled Wintun DLL.
 fn extract_wintun_dll() -> Result<()> {
     Ok(())
 }

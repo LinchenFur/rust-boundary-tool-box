@@ -1,4 +1,11 @@
+// Main Slint UI for the Boundary toolbox.
+//
+// Rust owns state and side effects. This file keeps the native UI declarative:
+// data rows, reusable controls, page layouts, and custom in-app modals.
+
 import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
+
+// ----- Data rows passed from Rust models -----
 
 export struct PortRow {
     label: string,
@@ -27,11 +34,14 @@ export struct VntPeerRow {
     online: bool,
 }
 
+// ----- Shared visual primitives -----
+
 component Txt inherits Text {
     font-family: "Microsoft YaHei UI";
     letter-spacing: 0px;
 }
 
+// Dark rounded surface used for main page panels and modal bodies.
 component Panel inherits Rectangle {
     in property <brush> fill: #151922;
     in property <brush> stroke: #273041;
@@ -46,6 +56,7 @@ component Panel inherits Rectangle {
     @children
 }
 
+// Consistent title/subtitle block for page and panel headers.
 component TitleBlock inherits Rectangle {
     in property <string> title;
     in property <string> sub: "";
@@ -73,6 +84,7 @@ component TitleBlock inherits Rectangle {
     }
 }
 
+// Compact status pill shown in the header.
 component StatusTag inherits Rectangle {
     in property <string> title;
     in property <string> sub;
@@ -128,6 +140,7 @@ component StatusTag inherits Rectangle {
     }
 }
 
+// Header navigation button used for all top-level pages.
 component NavTab inherits Rectangle {
     in property <string> label;
     in property <bool> selected: false;
@@ -156,6 +169,7 @@ component NavTab inherits Rectangle {
     }
 }
 
+// Primary/secondary command button with a vertical accent marker.
 component Action inherits Rectangle {
     in property <string> label;
     in property <string> sub: "";
@@ -224,6 +238,7 @@ component Action inherits Rectangle {
     }
 }
 
+// Label + value container for paths, status, and diagnostics.
 component InfoBox inherits Rectangle {
     in property <string> label;
     in property <string> value;
@@ -271,6 +286,7 @@ component InfoBox inherits Rectangle {
     }
 }
 
+// Framed input background; actual text editing is delegated to LineEdit.
 component InputBox inherits Rectangle {
     in property <bool> enabled: true;
 
@@ -283,6 +299,7 @@ component InputBox inherits Rectangle {
     @children
 }
 
+// Settings/status row with an accent marker.
 component DetailRow inherits Rectangle {
     in property <string> label;
     in property <string> value;
@@ -338,6 +355,7 @@ component DetailRow inherits Rectangle {
     }
 }
 
+// One diagnostics port row.
 component PortLine inherits Rectangle {
     in property <string> label;
     in property <string> detail;
@@ -404,6 +422,7 @@ component PortLine inherits Rectangle {
     }
 }
 
+// One remote community server row.
 component ServerLine inherits Rectangle {
     in property <string> name;
     in property <string> address;
@@ -490,6 +509,7 @@ component ServerLine inherits Rectangle {
     }
 }
 
+// One drive row in the custom full-scan dialog.
 component DriveLine inherits Rectangle {
     in property <string> label;
     in property <bool> checked: false;
@@ -559,6 +579,7 @@ component DriveLine inherits Rectangle {
     }
 }
 
+// Toggle for the game-window topmost setting.
 component TopSwitch inherits Rectangle {
     in property <bool> checked: false;
     callback toggled(value: bool);
@@ -596,6 +617,7 @@ component TopSwitch inherits Rectangle {
     }
 }
 
+// Generic two-state option row used by the VNT page.
 component OptionSwitch inherits Rectangle {
     in property <bool> checked: false;
     in property <string> on-label;
@@ -669,6 +691,7 @@ component OptionSwitch inherits Rectangle {
     }
 }
 
+// One VNT peer row shown after the native VNT core starts.
 component VntPeerLine inherits Rectangle {
     in property <string> name;
     in property <string> address;
@@ -735,14 +758,19 @@ component VntPeerLine inherits Rectangle {
     }
 }
 
+// ----- Application window -----
+
 export component AppWindow inherits Window {
     title: "边境社区服工具箱";
     width: 1260px;
     height: 780px;
     background: #0b0e13;
 
+    // Page index: 0 launch, 1 directory, 2 diagnostics, 3 settings,
+    // 4 servers, 5 VNT multiplayer.
     property <int> page: 0;
 
+    // Directory/install state shared by the launch and directory pages.
     in-out property <string> payload_label: "";
     in-out property <string> detected_text: "正在检测 Steam 安装目录...";
     in-out property <string> manual_path: "";
@@ -768,8 +796,12 @@ export component AppWindow inherits Window {
     in-out property <string> app_dialog_primary_text: "确定";
     in-out property <string> app_dialog_secondary_text: "取消";
     in-out property <bool> has_target: false;
+
+    // Remote community server list state.
     in-out property <bool> servers_loading: false;
     in-out property <string> server_status_text: "服务器列表：未刷新";
+
+    // VNT multiplayer state and options.
     in-out property <string> vnt_server_text: "101.35.230.139:6660";
     in-out property <string> vnt_network_code: "";
     in-out property <string> vnt_password: "";
@@ -784,31 +816,42 @@ export component AppWindow inherits Window {
     in-out property <string> vnt_server_status_text: "-";
     in-out property <string> vnt_nat_text: "-";
     in-out property <string> vnt_peer_summary_text: "0 个节点";
+
+    // List models are owned by Rust and updated in place.
     in-out property <[PortRow]> port_rows;
     in-out property <[DriveRow]> drive_rows;
     in-out property <[ServerRow]> server_rows;
     in-out property <[VntPeerRow]> vnt_peer_rows;
 
+    // Directory selection callbacks.
     callback browse_clicked();
     callback redetect_clicked();
     callback scan_clicked();
     callback auto_mode_clicked();
     callback manual_mode_clicked();
     callback manual_path_changed(text: string);
+
+    // Settings callbacks.
     callback keep_topmost_toggled(value: bool);
     callback hotkey_text_changed(text: string);
     callback hotkey_captured(text: string, control: bool, alt: bool, shift: bool, meta: bool);
+
+    // Core action callbacks.
     callback install_clicked();
     callback uninstall_clicked();
     callback launch_clicked();
     callback detect_processes_clicked();
     callback stop_processes_clicked();
     callback open_logs_clicked();
+
+    // Remote server and VNT callbacks.
     callback refresh_servers_clicked();
     callback vnt_start_clicked();
     callback vnt_stop_clicked();
     callback vnt_refresh_clicked();
     callback toggle_logs_clicked();
+
+    // Custom modal callbacks.
     callback drive_toggled(index: int, checked: bool);
     callback drive_confirmed();
     callback drive_cancelled();
@@ -819,6 +862,7 @@ export component AppWindow inherits Window {
         padding: 18px;
         spacing: 14px;
 
+        // Header: brand, navigation tabs, and target readiness.
         HorizontalLayout {
             height: 64px;
             spacing: 14px;
@@ -905,6 +949,7 @@ export component AppWindow inherits Window {
             vertical-stretch: 1;
             background: #00000000;
 
+        // Page 0: launch and quick install/uninstall actions.
         if page == 0 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1018,6 +1063,7 @@ export component AppWindow inherits Window {
             }
         }
 
+        // Page 1: Steam auto-detection, manual path input, and drive scan.
         if page == 1 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1131,6 +1177,7 @@ export component AppWindow inherits Window {
             }
         }
 
+        // Page 2: process/port diagnostics and session logs.
         if page == 2 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1233,6 +1280,7 @@ export component AppWindow inherits Window {
             }
         }
 
+        // Page 5: native VNT multiplayer platform.
         if page == 5 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1481,6 +1529,7 @@ export component AppWindow inherits Window {
             }
         }
 
+        // Page 3: topmost behavior, hotkey capture, and detailed state.
         if page == 3 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1508,6 +1557,8 @@ export component AppWindow inherits Window {
                         focus-on-tab-navigation: false;
 
                         key-pressed(event) => {
+                            // Rust normalizes the captured key text and
+                            // handles Esc as "cancel listening".
                             if hotkey_listening && !event.repeat {
                                 root.hotkey_captured(
                                     event.text,
@@ -1595,6 +1646,7 @@ export component AppWindow inherits Window {
             }
         }
 
+        // Page 4: remote community server list from the JSON endpoint.
         if page == 4 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1662,6 +1714,8 @@ export component AppWindow inherits Window {
         }
     }
 
+    // Custom drive picker. This replaces native folder/drive dialogs so the
+    // visual language stays consistent inside Slint.
     if show_drive_dialog : Rectangle {
         width: parent.width;
         height: parent.height;
@@ -1730,6 +1784,7 @@ export component AppWindow inherits Window {
         }
     }
 
+    // Shared app modal for info, error, confirm, and path-input flows.
     if show_app_dialog : Rectangle {
         width: parent.width;
         height: parent.height;

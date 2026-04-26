@@ -1,5 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+//! Slint UI entry point and application controller.
+//!
+//! `core` owns dangerous filesystem/process operations. This file binds Slint
+//! callbacks, maintains UI models, starts background work on threads, and routes
+//! results back to the main thread through a channel.
+
 mod core;
 mod vnt_platform;
 mod win;
@@ -29,10 +35,13 @@ use crate::vnt_platform::{VntEvent, VntLaunchOptions, VntPeer, VntSession};
 
 slint::include_modules!();
 
+// Remote community server list endpoint. The request is intentionally tiny and
+// implemented with TcpStream so the UI does not need an async HTTP runtime.
 const SERVER_LIST_HOST: &str = "ax48735790k.vicp.fun";
 const SERVER_LIST_PORT: u16 = 3000;
 const SERVER_LIST_PATH: &str = "/servers";
 
+/// One row returned by the community server JSON endpoint.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 struct RemoteServer {
@@ -49,6 +58,7 @@ struct RemoteServer {
 
 fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
+    // A hidden child process uses this mode to keep the game window topmost.
     if let Some(result) = core::watch_mode_from_args(&args) {
         std::process::exit(result?);
     }
@@ -66,6 +76,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Messages sent from worker threads back into the Slint main thread.
 #[derive(Debug, Clone)]
 enum AppMessage {
     Log(String),
@@ -92,6 +103,7 @@ enum AppMessage {
     },
 }
 
+/// Action waiting behind the custom in-app modal.
 enum PendingDialogAction {
     None,
     LaunchWithConflicts {
@@ -103,6 +115,7 @@ enum PendingDialogAction {
     ManualPathInput,
 }
 
+/// Mutable application state shared by Slint callbacks.
 struct AppController {
     ui: AppWindow,
     core: Arc<InstallerCore>,
@@ -121,8 +134,11 @@ struct AppController {
 }
 
 impl AppController {
+    /// Creates models, log files, core services, and initial UI state.
     fn new(ui: AppWindow) -> Result<Rc<RefCell<Self>>> {
         let (tx, rx) = unbounded();
+        // Core logs may be emitted from worker threads, so route them through
+        // the same UI-safe channel as other background results.
         let log_tx = tx.clone();
         let logger = Arc::new(move |message: String| {
             let _ = log_tx.send(AppMessage::Log(message));
@@ -164,6 +180,8 @@ impl AppController {
             session_log_path.display()
         )?;
 
+        // Slint models are created once and mutated in place to avoid breaking
+        // existing ListView bindings.
         let port_model = Rc::new(VecModel::from(
             MONITORED_PORTS
                 .iter()
@@ -236,6 +254,8 @@ impl AppController {
             pending_dialog_action: PendingDialogAction::None,
         }));
 
+        // Port monitoring starts immediately; target-specific checks still run
+        // only when the user chooses diagnostic actions.
         spawn_port_thread(
             controller.borrow().core.clone(),
             controller.borrow().tx.clone(),
@@ -244,6 +264,7 @@ impl AppController {
         Ok(controller)
     }
 
+    /// Wires every Slint callback to the controller.
     fn bind_callbacks(controller: &Rc<RefCell<Self>>) {
         let ui = controller.borrow().ui.as_weak();
 
@@ -409,9 +430,12 @@ impl AppController {
         }
     }
 
+    /// Starts UI-thread timers for channel draining and small busy animations.
     fn start_background_timers(controller: &Rc<RefCell<Self>>) {
         let log_controller = Rc::clone(controller);
         let log_timer = Timer::default();
+        // Slint UI objects are not Send, so worker threads only enqueue
+        // messages; this timer applies them on the UI thread.
         log_timer.start(TimerMode::Repeated, Duration::from_millis(100), move || {
             log_controller.borrow_mut().drain_messages();
         });
@@ -430,11 +454,13 @@ impl AppController {
         std::mem::forget(pulse_timer);
     }
 
+    /// Performs initial auto-detection and server-list refresh.
     fn initialize(&mut self) {
         self.refresh_target_from_mode(true);
         self.start_refresh_servers();
     }
 
+    /// Adds a line to both the session log file and the visible log panel.
     fn append_log(&mut self, message: &str) {
         let _ = writeln!(self.session_log_file, "{}", message);
         let current = self.ui.get_log_text().to_string();
@@ -446,6 +472,7 @@ impl AppController {
         self.ui.set_log_text(next.into());
     }
 
+    /// Applies queued worker messages to UI state.
     fn drain_messages(&mut self) {
         while let Ok(message) = self.rx.try_recv() {
             match message {
@@ -497,6 +524,8 @@ impl AppController {
                         self.sync_has_target();
                     }
                     if title == "安装" {
+                        // Installation success is intentionally not shown as a
+                        // modal because the user asked to avoid that pop-up.
                         self.append_log(&format!(
                             "[{}] 安装完成：{}",
                             core::now_text(),
@@ -536,6 +565,7 @@ impl AppController {
         }
     }
 
+    /// Converts successful server responses into ListView rows.
     fn update_server_rows(&mut self, servers: Vec<RemoteServer>) {
         if servers.is_empty() {
             self.set_server_rows(vec![server_placeholder_row(
@@ -549,6 +579,7 @@ impl AppController {
         self.set_server_rows(rows);
     }
 
+    /// Reconciles the server model without replacing the model object.
     fn set_server_rows(&mut self, rows: Vec<ServerRow>) {
         while self.server_model.row_count() > rows.len() {
             let _ = self.server_model.remove(self.server_model.row_count() - 1);
@@ -562,6 +593,7 @@ impl AppController {
         }
     }
 
+    /// Maps core port diagnostics into Slint rows.
     fn update_port_rows(&mut self, rows: Vec<CorePortStatusRow>) {
         let mapped = rows
             .into_iter()
@@ -588,12 +620,14 @@ impl AppController {
         }
     }
 
+    /// Switches between Steam auto-detection and manual path mode.
     fn set_mode(&mut self, mode: PathMode) {
         self.mode = mode;
         self.ui.set_auto_mode(matches!(mode, PathMode::Auto));
         self.refresh_target_from_mode(false);
     }
 
+    /// Updates manual path state as the user edits the input field.
     fn on_manual_path_changed(&mut self, text: String) {
         self.ui.set_manual_path(text.clone().into());
         if matches!(self.mode, PathMode::Manual) {
@@ -601,6 +635,7 @@ impl AppController {
         }
     }
 
+    /// Opens the custom path input modal instead of a native folder picker.
     fn browse_path(&mut self) {
         if self.ui.get_busy() {
             return;
@@ -618,6 +653,7 @@ impl AppController {
         self.show_path_dialog(&initial);
     }
 
+    /// Refreshes the current target based on the selected path mode.
     fn refresh_target_from_mode(&mut self, initial: bool) {
         match self.mode {
             PathMode::Auto => match self.core.detect_steam_game_win64() {
@@ -664,6 +700,7 @@ impl AppController {
         }
     }
 
+    /// Stores the current target and mirrors it into Slint properties.
     fn set_current_target(&mut self, path: Option<PathBuf>, status: &str, load_topmost: bool) {
         self.current_target = path;
         self.ui.set_target_text(
@@ -685,10 +722,12 @@ impl AppController {
         self.sync_has_target();
     }
 
+    /// Keeps the UI's enable/disable bindings in sync with target availability.
     fn sync_has_target(&self) {
         self.ui.set_has_target(self.current_target.is_some());
     }
 
+    /// Converts Slint key events into a normalized global-hotkey string.
     fn capture_hotkey(&mut self, text: String, control: bool, alt: bool, shift: bool, meta: bool) {
         if hotkey_capture_is_escape(&text) {
             self.ui.set_hotkey_listening(false);
@@ -715,6 +754,7 @@ impl AppController {
         }
     }
 
+    /// Returns a validated target or a user-facing error for the current mode.
     fn require_target(&mut self) -> Result<PathBuf> {
         match self.mode {
             PathMode::Auto => {
@@ -734,6 +774,7 @@ impl AppController {
         }
     }
 
+    /// Opens the custom drive-selection modal for full-drive scans.
     fn open_drive_dialog(&mut self) {
         if self.ui.get_busy() {
             return;
@@ -756,6 +797,7 @@ impl AppController {
         self.ui.set_show_drive_dialog(true);
     }
 
+    /// Updates one drive row after the user toggles it.
     fn toggle_drive(&mut self, index: i32, checked: bool) {
         let index = index.max(0) as usize;
         if let Some(mut row) = self.drive_model.row_data(index) {
@@ -764,6 +806,7 @@ impl AppController {
         }
     }
 
+    /// Collects the currently checked drive roots.
     fn selected_drives(&self) -> Vec<PathBuf> {
         (0..self.drive_model.row_count())
             .filter_map(|index| self.drive_model.row_data(index))
@@ -772,6 +815,7 @@ impl AppController {
             .collect()
     }
 
+    /// Starts drive scanning on a worker thread.
     fn start_drive_scan(&mut self) {
         let drives = self.selected_drives();
         if drives.is_empty() {
@@ -806,6 +850,7 @@ impl AppController {
         });
     }
 
+    /// Fetches the remote community server list on a worker thread.
     fn start_refresh_servers(&mut self) {
         if self.ui.get_servers_loading() {
             return;
@@ -825,6 +870,7 @@ impl AppController {
         });
     }
 
+    /// Starts the vendored VNT core and streams its status into the UI.
     fn start_vnt(&mut self) {
         if self.vnt_session.is_some() || self.ui.get_vnt_busy() {
             return;
@@ -869,6 +915,7 @@ impl AppController {
         }
     }
 
+    /// Requests the VNT session to stop; final cleanup arrives as an event.
     fn stop_vnt(&mut self) {
         if let Some(session) = self.vnt_session.as_mut() {
             session.stop();
@@ -881,12 +928,14 @@ impl AppController {
         }
     }
 
+    /// Gives immediate feedback while waiting for the next VNT snapshot tick.
     fn refresh_vnt_status_hint(&mut self) {
         if self.vnt_session.is_some() {
             self.ui.set_vnt_detail_text("等待联机核心刷新状态".into());
         }
     }
 
+    /// Applies lifecycle events emitted by the VNT worker thread.
     fn apply_vnt_event(&mut self, event: VntEvent) {
         match event {
             VntEvent::Snapshot(snapshot) => self.apply_vnt_snapshot(snapshot),
@@ -910,6 +959,7 @@ impl AppController {
         }
     }
 
+    /// Mirrors a VNT snapshot into the Slint properties and peer model.
     fn apply_vnt_snapshot(&mut self, snapshot: vnt_platform::VntSnapshot) {
         self.ui.set_vnt_running(snapshot.running);
         self.ui.set_vnt_busy(snapshot.busy);
@@ -926,6 +976,7 @@ impl AppController {
         self.set_vnt_peer_rows(snapshot.peers.into_iter().map(vnt_peer_to_row).collect());
     }
 
+    /// Reconciles the peer model in place for the ListView.
     fn set_vnt_peer_rows(&mut self, rows: Vec<VntPeerRow>) {
         while self.vnt_peer_model.row_count() > rows.len() {
             let _ = self
@@ -941,6 +992,7 @@ impl AppController {
         }
     }
 
+    /// Starts installation/update on a worker thread.
     fn start_install(&mut self) {
         let target = match self.require_target() {
             Ok(target) => target,
@@ -980,6 +1032,7 @@ impl AppController {
         });
     }
 
+    /// Starts uninstall on a worker thread.
     fn start_uninstall(&mut self) {
         let target = match self.require_target() {
             Ok(target) => target,
@@ -1013,6 +1066,7 @@ impl AppController {
         });
     }
 
+    /// Performs pre-launch validation and asks before closing port conflicts.
     fn start_launch(&mut self) {
         let target = match self.require_target() {
             Ok(target) => target,
@@ -1055,6 +1109,7 @@ impl AppController {
         self.start_launch_with_conflicts(target, keep_topmost, hotkey, conflicts);
     }
 
+    /// Launches after optionally closing known port-conflict processes.
     fn start_launch_with_conflicts(
         &mut self,
         target: PathBuf,
@@ -1104,6 +1159,7 @@ impl AppController {
         });
     }
 
+    /// Runs process and port diagnostics on a worker thread.
     fn start_detect_processes(&mut self) {
         let target = match self.require_target() {
             Ok(target) => target,
@@ -1154,6 +1210,7 @@ impl AppController {
         });
     }
 
+    /// Closes runtime and port-conflict processes from a worker thread.
     fn start_stop_processes(&mut self) {
         let target = match self.require_target() {
             Ok(target) => target,
@@ -1225,16 +1282,19 @@ impl AppController {
         });
     }
 
+    /// Shows a non-error in-app modal.
     fn show_info_dialog(&mut self, title: &str, text: &str) {
         self.show_app_dialog(title, text, "确定", "", false, false);
         self.pending_dialog_action = PendingDialogAction::None;
     }
 
+    /// Shows an error in-app modal.
     fn show_error_dialog(&mut self, title: &str, text: &str) {
         self.show_app_dialog(title, text, "确定", "", false, true);
         self.pending_dialog_action = PendingDialogAction::None;
     }
 
+    /// Shows an in-app confirmation modal and remembers the accepted action.
     fn show_confirm_dialog(
         &mut self,
         title: &str,
@@ -1247,6 +1307,7 @@ impl AppController {
         self.pending_dialog_action = action;
     }
 
+    /// Shows the in-app manual path input modal.
     fn show_path_dialog(&mut self, initial: &str) {
         self.show_app_dialog(
             "选择游戏根目录",
@@ -1261,6 +1322,7 @@ impl AppController {
         self.pending_dialog_action = PendingDialogAction::ManualPathInput;
     }
 
+    /// Shared modal state setter used by info, error, confirm, and input flows.
     fn show_app_dialog(
         &mut self,
         title: &str,
@@ -1280,6 +1342,7 @@ impl AppController {
         self.ui.set_show_app_dialog(true);
     }
 
+    /// Clears modal state and any pending action.
     fn hide_app_dialog(&mut self) {
         self.ui.set_show_app_dialog(false);
         self.ui.set_app_dialog_confirm(false);
@@ -1288,6 +1351,7 @@ impl AppController {
         self.pending_dialog_action = PendingDialogAction::None;
     }
 
+    /// Handles the modal primary button.
     fn handle_dialog_primary(&mut self) {
         let action = std::mem::replace(&mut self.pending_dialog_action, PendingDialogAction::None);
         match action {
@@ -1305,6 +1369,7 @@ impl AppController {
         }
     }
 
+    /// Handles modal cancellation and applies any cancel-side status changes.
     fn handle_dialog_secondary(&mut self) {
         if matches!(
             &self.pending_dialog_action,
@@ -1315,6 +1380,7 @@ impl AppController {
         self.hide_app_dialog();
     }
 
+    /// Validates and applies the manual path typed into the modal.
     fn confirm_manual_path_from_dialog(&mut self) {
         let raw = self.ui.get_app_dialog_input_text().to_string();
         if raw.trim().is_empty() {
@@ -1348,12 +1414,14 @@ impl AppController {
         }
     }
 
+    /// Opens the log directory in Explorer.
     fn open_logs_dir(&self) {
         let _ = std::process::Command::new("explorer")
             .arg(self.core.installer_home.join("logs"))
             .spawn();
     }
 
+    /// Stops background sessions before the UI exits.
     fn shutdown(&mut self) {
         if let Some(session) = self.vnt_session.as_mut() {
             session.stop();
@@ -1361,6 +1429,7 @@ impl AppController {
     }
 }
 
+/// Fetches and parses the remote community server list.
 fn fetch_servers() -> Result<Vec<RemoteServer>> {
     let body = http_get_json(SERVER_LIST_HOST, SERVER_LIST_PORT, SERVER_LIST_PATH)
         .context("请求服务器列表接口失败")?;
@@ -1369,6 +1438,7 @@ fn fetch_servers() -> Result<Vec<RemoteServer>> {
     Ok(servers)
 }
 
+/// Checks whether any runtime process group contains entries.
 fn runtime_snapshot_has_any(snapshot: &RuntimeSnapshot) -> bool {
     !snapshot.game.is_empty()
         || !snapshot.wrapper.is_empty()
@@ -1376,10 +1446,12 @@ fn runtime_snapshot_has_any(snapshot: &RuntimeSnapshot) -> bool {
         || !snapshot.watcher.is_empty()
 }
 
+/// Slint reports Escape as a control character on this backend.
 fn hotkey_capture_is_escape(text: &str) -> bool {
     text.starts_with('\u{001b}')
 }
 
+/// Builds a hotkey string from Slint's text/modifier fields.
 fn hotkey_from_capture(
     text: &str,
     control: bool,
@@ -1405,6 +1477,7 @@ fn hotkey_from_capture(
     Some(parts.join("+"))
 }
 
+/// Maps Slint key text into the labels accepted by core::normalize_hotkey.
 fn captured_key_label(text: &str) -> Option<String> {
     let mut chars = text.chars();
     let ch = chars.next()?;
@@ -1432,6 +1505,7 @@ fn captured_key_label(text: &str) -> Option<String> {
     }
 }
 
+/// Builds the detailed process/port report shown in the diagnostics modal.
 fn format_process_detection_message(
     snapshot: &RuntimeSnapshot,
     conflicts: &[PortConflict],
@@ -1448,6 +1522,7 @@ fn format_process_detection_message(
     parts.join("\n\n")
 }
 
+/// Minimal HTTP/1.1 GET helper for JSON endpoints.
 fn http_get_json(host: &str, port: u16, path: &str) -> Result<String> {
     let mut stream =
         TcpStream::connect((host, port)).with_context(|| format!("连接 {host}:{port} 失败"))?;
@@ -1476,6 +1551,8 @@ fn http_get_json(host: &str, port: u16, path: &str) -> Result<String> {
         bail!("服务器返回 HTTP {status_code}");
     }
 
+    // The server currently may return either a fixed Content-Length response or
+    // transfer-encoding: chunked. Decode both so the UI list is robust.
     let is_chunked = lines.any(|line| {
         let lower = line.to_ascii_lowercase();
         lower.starts_with("transfer-encoding:") && lower.contains("chunked")
@@ -1489,6 +1566,7 @@ fn http_get_json(host: &str, port: u16, path: &str) -> Result<String> {
     String::from_utf8(decoded).context("服务器列表响应不是 UTF-8")
 }
 
+/// Decodes a small HTTP chunked body.
 fn decode_chunked_body(mut body: &[u8]) -> Result<Vec<u8>> {
     let mut decoded = Vec::new();
     loop {
@@ -1513,6 +1591,7 @@ fn decode_chunked_body(mut body: &[u8]) -> Result<Vec<u8>> {
     Ok(decoded)
 }
 
+/// Converts remote server JSON into a compact UI row.
 fn server_to_row(server: RemoteServer) -> ServerRow {
     let state = normalize_server_state(&server.server_state);
     let active = state != "状态未知";
@@ -1533,6 +1612,7 @@ fn server_to_row(server: RemoteServer) -> ServerRow {
     }
 }
 
+/// Placeholder row used while loading or after an error.
 fn server_placeholder_row(title: &str, detail: &str) -> ServerRow {
     ServerRow {
         name: title.into(),
@@ -1544,6 +1624,7 @@ fn server_placeholder_row(title: &str, detail: &str) -> ServerRow {
     }
 }
 
+/// Applies the default disconnected VNT state to Slint properties.
 fn apply_vnt_idle_to_ui(ui: &AppWindow) {
     let snapshot = vnt_platform::idle_snapshot();
     ui.set_vnt_busy(snapshot.busy);
@@ -1556,6 +1637,7 @@ fn apply_vnt_idle_to_ui(ui: &AppWindow) {
     ui.set_vnt_peer_summary_text(snapshot.peer_summary.into());
 }
 
+/// Default peer rows shown before VNT is running.
 fn vnt_placeholder_rows() -> Vec<VntPeerRow> {
     vnt_platform::idle_snapshot()
         .peers
@@ -1564,6 +1646,7 @@ fn vnt_placeholder_rows() -> Vec<VntPeerRow> {
         .collect()
 }
 
+/// Maps a VNT peer snapshot into a Slint row.
 fn vnt_peer_to_row(peer: VntPeer) -> VntPeerRow {
     VntPeerRow {
         name: peer.name.into(),
@@ -1573,6 +1656,7 @@ fn vnt_peer_to_row(peer: VntPeer) -> VntPeerRow {
     }
 }
 
+/// Normalizes empty/invalid server state strings.
 fn normalize_server_state(state: &str) -> String {
     match state.trim() {
         "" | "InvalidState" => "状态未知".to_string(),
@@ -1580,6 +1664,7 @@ fn normalize_server_state(state: &str) -> String {
     }
 }
 
+/// Displays blank remote fields as '-'.
 fn empty_as_dash(value: &str) -> &str {
     if value.trim().is_empty() {
         "-"
@@ -1588,6 +1673,7 @@ fn empty_as_dash(value: &str) -> &str {
     }
 }
 
+/// Keeps long server names from overflowing list rows.
 fn shorten_text(value: &str, max_chars: usize) -> String {
     let mut text = value.trim().to_string();
     if text.chars().count() <= max_chars {
@@ -1598,6 +1684,7 @@ fn shorten_text(value: &str, max_chars: usize) -> String {
     text
 }
 
+/// Formats server last-heartbeat timestamp in local time.
 fn format_heartbeat(timestamp_ms: i64) -> String {
     if timestamp_ms <= 0 {
         return "-".to_string();
@@ -1611,6 +1698,7 @@ fn format_heartbeat(timestamp_ms: i64) -> String {
         .unwrap_or_else(|| "-".to_string())
 }
 
+/// Periodically refreshes port status until the app exits.
 fn spawn_port_thread(core: Arc<InstallerCore>, tx: Sender<AppMessage>, stop: Arc<AtomicBool>) {
     thread::spawn(move || {
         while !stop.load(Ordering::Relaxed) {

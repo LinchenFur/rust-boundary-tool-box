@@ -1,3 +1,9 @@
+//! Windows-specific helpers for global hotkeys and topmost game-window control.
+//!
+//! The main application starts a hidden watcher process after launching the
+//! game. That watcher finds the game window, optionally keeps it topmost, and
+//! listens for a global hotkey to toggle the behavior.
+
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -20,6 +26,7 @@ use crate::core::{
 
 const HOTKEY_ID: i32 = 0x5045_5645;
 
+/// Normalized global hotkey definition ready for RegisterHotKey.
 #[derive(Debug, Clone)]
 pub struct HotkeyDefinition {
     pub normalized: String,
@@ -27,6 +34,7 @@ pub struct HotkeyDefinition {
     pub vk_code: u32,
 }
 
+/// Parses user-facing hotkey text such as Ctrl+Alt+F10.
 pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
     let raw = if value.trim().is_empty() {
         DEFAULT_TOPMOST_HOTKEY
@@ -49,6 +57,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
 
     for token in tokens {
         let lower = token.to_lowercase();
+        // Modifiers can appear in any order but are normalized later.
         let modifier = match lower.as_str() {
             "ctrl" | "control" => Some(("Ctrl", MOD_CONTROL.0)),
             "alt" => Some(("Alt", MOD_ALT.0)),
@@ -70,6 +79,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
         }
 
         if token.len() == 1 {
+            // Single ASCII letters/digits map directly to virtual-key codes.
             let ch = token.chars().next().unwrap();
             if ch.is_ascii_alphabetic() {
                 main_label = Some(ch.to_ascii_uppercase().to_string());
@@ -83,6 +93,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
             }
         }
 
+        // Function keys use the contiguous VK_F1..VK_F24 range.
         if lower.starts_with('f') && lower[1..].chars().all(|ch| ch.is_ascii_digit()) {
             let number = lower[1..].parse::<u32>()?;
             if (1..=24).contains(&number) {
@@ -92,6 +103,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
             }
         }
 
+        // Named keys are limited to the set useful for a simple toggle shortcut.
         let special = match lower.as_str() {
             "space" => Some(("Space", 0x20)),
             "tab" => Some(("Tab", 0x09)),
@@ -120,6 +132,8 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
     let Some(vk_code) = vk_code else {
         bail!("快捷键缺少主键，请使用类似 Ctrl+Alt+F10 的格式。");
     };
+    // Store modifiers in a stable order so the UI does not bounce between
+    // equivalent strings like Alt+Ctrl+F10 and Ctrl+Alt+F10.
     let ordered = ["Ctrl", "Alt", "Shift", "Win"]
         .into_iter()
         .filter(|label| seen.contains(&label.to_string()))
@@ -133,6 +147,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
     })
 }
 
+/// Top-level native window candidate found during enumeration.
 #[derive(Debug, Clone)]
 struct WindowCandidate {
     hwnd: HWND,
@@ -140,6 +155,7 @@ struct WindowCandidate {
     pid: u32,
 }
 
+/// Watches one game process and toggles topmost state through a global hotkey.
 pub fn watch_window_by_pid(process_id: u32, keep_topmost: bool, hotkey_text: &str) -> Result<i32> {
     let hotkey = parse_hotkey_text(hotkey_text)?;
     let mut hotkey_registered = false;
@@ -156,6 +172,8 @@ pub fn watch_window_by_pid(process_id: u32, keep_topmost: bool, hotkey_text: &st
     let mut last_toggle_state: Option<bool> = None;
 
     loop {
+        // The watcher is a hidden process with its own message queue. Polling
+        // WM_HOTKEY keeps the logic simple and avoids a visible window.
         while consume_hotkey_messages()? {
             topmost_enabled = !topmost_enabled;
             if let Some(current_hwnd) = hwnd {
@@ -169,6 +187,8 @@ pub fn watch_window_by_pid(process_id: u32, keep_topmost: bool, hotkey_text: &st
 
         let window_exists = hwnd.is_some_and(|handle| unsafe { IsWindow(Some(handle)).as_bool() });
         if !window_exists {
+            // First try the exact game PID; fallback covers launchers that spawn
+            // a child window under another process.
             hwnd = find_window_by_pid(process_id).or_else(find_boundary_window_fallback);
             if hwnd.is_some() {
                 last_seen_window = Instant::now();
@@ -210,6 +230,7 @@ pub fn watch_window_by_pid(process_id: u32, keep_topmost: bool, hotkey_text: &st
     Ok(0)
 }
 
+/// Drains WM_HOTKEY messages from the watcher thread queue.
 fn consume_hotkey_messages() -> Result<bool> {
     let mut consumed = false;
     unsafe {
@@ -225,6 +246,7 @@ fn consume_hotkey_messages() -> Result<bool> {
     Ok(consumed)
 }
 
+/// Finds the first visible window owned by a process ID.
 fn find_window_by_pid(process_id: u32) -> Option<HWND> {
     enum_windows()
         .into_iter()
@@ -232,6 +254,7 @@ fn find_window_by_pid(process_id: u32) -> Option<HWND> {
         .map(|window| window.hwnd)
 }
 
+/// Fallback title scan for cases where the visible game window has a child PID.
 fn find_boundary_window_fallback() -> Option<HWND> {
     enum_windows().into_iter().find_map(|window| {
         let title = window.title.to_lowercase();
@@ -243,6 +266,7 @@ fn find_boundary_window_fallback() -> Option<HWND> {
     })
 }
 
+/// Enumerates visible top-level windows with titles and process IDs.
 fn enum_windows() -> Vec<WindowCandidate> {
     unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let windows = unsafe { &mut *(lparam.0 as *mut Vec<WindowCandidate>) };
@@ -279,6 +303,7 @@ fn enum_windows() -> Vec<WindowCandidate> {
     windows
 }
 
+/// Restores/focuses a window and applies topmost; can optionally release it.
 fn force_window_topmost(hwnd: HWND, keep_topmost: bool) -> Result<()> {
     unsafe {
         let _ = ShowWindow(hwnd, SW_RESTORE);
@@ -307,6 +332,7 @@ fn force_window_topmost(hwnd: HWND, keep_topmost: bool) -> Result<()> {
     Ok(())
 }
 
+/// Changes topmost state without stealing focus.
 fn set_window_topmost_enabled(hwnd: HWND, enabled: bool) -> Result<()> {
     unsafe {
         SetWindowPos(
