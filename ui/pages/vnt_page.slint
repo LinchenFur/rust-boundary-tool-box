@@ -1,0 +1,274 @@
+import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
+import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
+import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, TopSwitch, Txt } from "../components.slint";
+import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+
+export component VntPage inherits Rectangle {
+    in-out property <string> vnt_server_text;
+    in-out property <string> vnt_network_code;
+    in-out property <string> vnt_password;
+    in-out property <bool> vnt_no_tun;
+    in-out property <bool> vnt_compress;
+    in-out property <bool> vnt_rtx;
+    in property <bool> vnt_busy;
+    in property <bool> vnt_running;
+    in property <string> vnt_status_text;
+    in property <string> vnt_detail_text;
+    in property <string> vnt_ip_text;
+    in property <string> vnt_server_status_text;
+    in property <string> vnt_nat_text;
+    in property <string> vnt_peer_summary_text;
+    in property <[VntPeerRow]> vnt_peer_rows;
+    callback vnt_start_clicked();
+    callback vnt_stop_clicked();
+    callback vnt_refresh_clicked();
+        // 页面 5：原生 VNT 联机平台。
+        HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 420px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 14px;
+
+                    TitleBlock {
+                        title: "联机";
+                        sub: vnt_running ? "虚拟局域网已运行" : "创建或加入同一个网络编号";
+                    }
+
+                    InfoBox {
+                        box-height: 78px;
+                        label: "STATUS";
+                        value: vnt_status_text + "\n" + vnt_detail_text;
+                        accent: vnt_running ? #9ef0b5 : (vnt_busy ? #f6c76d : #a8d8ff);
+                    }
+
+                    Txt {
+                        text: "服务器";
+                        color: #95a3b8;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    InputBox {
+                        enabled: !vnt_running && !vnt_busy;
+
+                        LineEdit {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            text: vnt_server_text;
+                            enabled: !vnt_running && !vnt_busy;
+                            placeholder-text: "101.35.230.139:6660";
+                            font-family: "Microsoft YaHei UI";
+                            font-size: 14px;
+                            edited(text) => { root.vnt_server_text = text; }
+                        }
+                    }
+
+                    Txt {
+                        text: "网络编号";
+                        color: #95a3b8;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    InputBox {
+                        enabled: !vnt_running && !vnt_busy;
+
+                        LineEdit {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            text: vnt_network_code;
+                            enabled: !vnt_running && !vnt_busy;
+                            placeholder-text: "相同编号会进入同一虚拟局域网";
+                            font-family: "Microsoft YaHei UI";
+                            font-size: 14px;
+                            edited(text) => { root.vnt_network_code = text; }
+                        }
+                    }
+
+                    Txt {
+                        text: "加密密码";
+                        color: #95a3b8;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    InputBox {
+                        enabled: !vnt_running && !vnt_busy;
+
+                        LineEdit {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            text: vnt_password;
+                            enabled: !vnt_running && !vnt_busy;
+                            placeholder-text: "可选";
+                            font-family: "Microsoft YaHei UI";
+                            font-size: 14px;
+                            edited(text) => { root.vnt_password = text; }
+                        }
+                    }
+
+                    OptionSwitch {
+                        checked: vnt_no_tun;
+                        on-label: "无虚拟网卡模式";
+                        off-label: "标准虚拟网卡模式";
+                        sub: vnt_no_tun ? "无需管理员权限，仅适合端口映射" : "适合游戏局域网联机";
+                        toggled(value) => { root.vnt_no_tun = value; }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+
+                        OptionSwitch {
+                            horizontal-stretch: 1;
+                            checked: vnt_compress;
+                            on-label: "压缩已开";
+                            off-label: "压缩关闭";
+                            sub: "弱网可尝试开启";
+                            toggled(value) => { root.vnt_compress = value; }
+                        }
+
+                        OptionSwitch {
+                            horizontal-stretch: 1;
+                            checked: vnt_rtx;
+                            on-label: "QUIC 优化";
+                            off-label: "常规通道";
+                            sub: "高丢包时可尝试";
+                            toggled(value) => { root.vnt_rtx = value; }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 58px;
+                        spacing: 12px;
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: vnt_running ? "运行中" : (vnt_busy ? "启动中" : "启动联机");
+                            sub: vnt_running ? "网络已建立" : "START";
+                            enabled: !vnt_running && !vnt_busy;
+                            primary: false;
+                            accent: #62e2c1;
+                            clicked => { root.vnt_start_clicked(); }
+                        }
+
+                        Action {
+                            width: 132px;
+                            label: vnt_busy ? "处理中" : "停止";
+                            sub: "";
+                            enabled: vnt_running && !vnt_busy;
+                            accent: #ffb4ab;
+                            clicked => { root.vnt_stop_clicked(); }
+                        }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 14px;
+
+                    HorizontalLayout {
+                        height: 54px;
+                        spacing: 12px;
+
+                        TitleBlock {
+                            horizontal-stretch: 1;
+                            title: "联机状态";
+                            sub: vnt_peer_summary_text;
+                        }
+
+                        Action {
+                            width: 132px;
+                            label: "刷新";
+                            sub: "";
+                            enabled: vnt_running && !vnt_busy;
+                            accent: #a8d8ff;
+                            clicked => { root.vnt_refresh_clicked(); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 108px;
+                        spacing: 12px;
+
+                        InfoBox {
+                            horizontal-stretch: 1;
+                            box-height: 108px;
+                            label: "VIRTUAL IP";
+                            value: vnt_ip_text;
+                            accent: vnt_running ? #9ef0b5 : #54617a;
+                        }
+
+                        InfoBox {
+                            horizontal-stretch: 1;
+                            box-height: 108px;
+                            label: "SERVER";
+                            value: vnt_server_status_text;
+                            accent: vnt_running ? #a8d8ff : #54617a;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 108px;
+                        spacing: 12px;
+
+                        InfoBox {
+                            horizontal-stretch: 1;
+                            box-height: 108px;
+                            label: "NETWORK";
+                            value: vnt_network_code == "" ? "-" : vnt_network_code;
+                            accent: #d7c4ff;
+                        }
+
+                        InfoBox {
+                            horizontal-stretch: 1;
+                            box-height: 108px;
+                            label: "NAT";
+                            value: vnt_nat_text;
+                            accent: #f6c76d;
+                        }
+                    }
+
+                    Panel {
+                        vertical-stretch: 1;
+                        fill: #0f131a;
+                        radius: 18px;
+
+                        ListView {
+                            x: 12px;
+                            y: 12px;
+                            width: parent.width - 24px;
+                            height: parent.height - 24px;
+
+                            for peer in vnt_peer_rows: VntPeerLine {
+                                name: peer.name;
+                                address: peer.address;
+                                detail: peer.detail;
+                                online: peer.online;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+}
+

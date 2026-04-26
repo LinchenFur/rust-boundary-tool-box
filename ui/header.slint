@@ -1,0 +1,88 @@
+import { NavTab, Panel, StatusTag, Txt } from "components.slint";
+
+export component ShellHeader inherits Rectangle {
+    in-out property <int> page;
+    in property <bool> has_target;
+    in property <bool> pulse;
+        HorizontalLayout {
+            height: 64px;
+            spacing: 14px;
+
+            Panel {
+                width: 250px;
+                radius: 18px;
+
+                VerticalLayout {
+                    padding-left: 18px;
+                    padding-right: 18px;
+                    spacing: 0px;
+
+                    Txt {
+                        text: "BOUNDARY";
+                        color: #eef4fb;
+                        font-family: "Segoe UI";
+                        font-size: 25px;
+                        font-weight: 800;
+                    }
+
+                    Txt {
+                        text: "社区服工具箱";
+                        color: #95a3b8;
+                        font-size: 13px;
+                        font-weight: 700;
+                    }
+                }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "启动";
+                selected: page == 0;
+                clicked => { root.page = 0; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "目录";
+                selected: page == 1;
+                clicked => { root.page = 1; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "诊断";
+                selected: page == 2;
+                clicked => { root.page = 2; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "联机";
+                selected: page == 5;
+                clicked => { root.page = 5; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "服务器";
+                selected: page == 4;
+                clicked => { root.page = 4; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "设置";
+                selected: page == 3;
+                clicked => { root.page = 3; }
+            }
+
+            Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+            StatusTag {
+                title: has_target ? "READY" : "WAIT";
+                sub: has_target ? "目标目录已锁定" : "等待目标目录";
+                accent: has_target ? #9ef0b5 : #f6c76d;
+                opacity: has_target ? 1.0 : (pulse ? 0.72 : 1.0);
+            }
+        }
+}

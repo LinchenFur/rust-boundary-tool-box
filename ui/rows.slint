@@ -1,0 +1,290 @@
+import { Txt } from "components.slint";
+
+export component PortLine inherits Rectangle {
+    in property <string> label;
+    in property <string> detail;
+    in property <bool> occupied: false;
+
+    height: 58px;
+    background: #00000000;
+
+    Rectangle {
+        width: parent.width;
+        height: 52px;
+        y: 3px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: occupied ? #ffb4ab : #344056;
+        background: occupied ? #241217 : #0f131a;
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 6px;
+                background: #00000000;
+
+                Rectangle {
+                    width: parent.width;
+                    height: 30px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: occupied ? #ffb4ab : #9ef0b5;
+                }
+            }
+
+            Txt {
+                text: label;
+                min-width: 88px;
+                color: #eef4fb;
+                font-size: 14px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
+            Txt {
+                text: detail;
+                color: occupied ? #ffd9d3 : #95a3b8;
+                font-size: 12px;
+                font-weight: 500;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+            }
+
+            Txt {
+                text: occupied ? "占用" : "空闲";
+                min-width: 52px;
+                color: occupied ? #ffb4ab : #9ef0b5;
+                font-size: 12px;
+                font-weight: 800;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// 单个远程社区服行。
+export component ServerLine inherits Rectangle {
+    in property <string> name;
+    in property <string> address;
+    in property <string> meta;
+    in property <string> state;
+    in property <string> players;
+    in property <bool> active: false;
+
+    height: 66px;
+    background: #00000000;
+
+    Rectangle {
+        width: parent.width;
+        height: 60px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: active ? #9ef0b5 : #344056;
+        background: active ? #0d2d1a : #0f131a;
+
+        HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 6px;
+                background: #00000000;
+
+                Rectangle {
+                    width: parent.width;
+                    height: 32px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: active ? #9ef0b5 : #a8d8ff;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                horizontal-stretch: 1;
+
+                Txt {
+                    text: name;
+                    color: #eef4fb;
+                    font-size: 14px;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+
+                Txt {
+                    text: address + "  /  " + meta;
+                    color: #95a3b8;
+                    font-size: 12px;
+                    font-weight: 500;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                min-width: 104px;
+
+                Txt {
+                    text: players;
+                    color: active ? #ddffe6 : #dbeafe;
+                    font-size: 14px;
+                    font-weight: 800;
+                    horizontal-alignment: right;
+                }
+
+                Txt {
+                    text: state;
+                    color: active ? #9ef0b5 : #95a3b8;
+                    font-size: 11px;
+                    font-weight: 600;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+    }
+}
+
+// 自定义全盘扫描弹窗中的单个盘符行。
+export component DriveLine inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked: false;
+    callback toggled();
+
+    height: 58px;
+    background: #00000000;
+
+    card := Rectangle {
+        y: 4px;
+        width: parent.width;
+        height: 50px;
+        border-radius: 15px;
+        border-width: 1px;
+        border-color: checked ? #9ef0b5 : (touch.has-hover ? #54617a : #344056);
+        background: checked ? #103821 : (touch.has-hover ? #161f2a : #0f131a);
+
+        animate background { duration: 120ms; }
+        animate border-color { duration: 120ms; }
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 22px;
+                background: #00000000;
+
+                Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 7px;
+                    border-width: 2px;
+                    border-color: checked ? #9ef0b5 : #54617a;
+                    background: checked ? #9ef0b5 : #00000000;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                horizontal-stretch: 1;
+
+                Txt {
+                    text: label;
+                    color: #eef4fb;
+                    font-size: 15px;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                }
+
+                Txt {
+                    text: checked ? "已选择" : "未选择";
+                    color: checked ? #9ef0b5 : #95a3b8;
+                    font-size: 11px;
+                    font-weight: 500;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        clicked => { parent.toggled(); }
+    }
+}
+
+export component VntPeerLine inherits Rectangle {
+    in property <string> name;
+    in property <string> address;
+    in property <string> detail;
+    in property <bool> online: false;
+
+    height: 64px;
+    background: #00000000;
+
+    Rectangle {
+        width: parent.width;
+        height: 58px;
+        y: 3px;
+        border-radius: 15px;
+        border-width: 1px;
+        border-color: online ? #9ef0b5 : #344056;
+        background: online ? #0c2b1b : #0f131a;
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 34px;
+                height: 34px;
+                border-radius: 17px;
+                background: online ? #9ef0b5 : #344056;
+
+                Txt {
+                    text: online ? "ON" : "--";
+                    color: online ? #08231d : #c7d1df;
+                    font-size: 10px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                horizontal-stretch: 1;
+
+                Txt {
+                    text: name + "  /  " + address;
+                    color: #eef4fb;
+                    font-size: 14px;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+
+                Txt {
+                    text: detail;
+                    color: #95a3b8;
+                    font-size: 12px;
+                    font-weight: 500;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+            }
+        }
+    }
+}

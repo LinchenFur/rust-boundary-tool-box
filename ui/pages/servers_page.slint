@@ -1,0 +1,76 @@
+import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
+import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
+import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, TopSwitch, Txt } from "../components.slint";
+import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+
+export component ServersPage inherits Rectangle {
+    in property <bool> servers_loading;
+    in property <string> server_status_text;
+    in property <[ServerRow]> server_rows;
+    callback refresh_servers_clicked();
+        // 页面 4：来自 JSON 接口的远程社区服列表。
+        HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 360px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "服务器";
+                    }
+
+                    InfoBox {
+                        box-height: 108px;
+                        label: "STATUS";
+                        value: server_status_text;
+                        accent: servers_loading ? #f6c76d : #9ef0b5;
+                    }
+
+                    Action {
+                        label: servers_loading ? "刷新中" : "刷新服务器";
+                        sub: "读取最新 JSON";
+                        enabled: !servers_loading;
+                        accent: #d7c4ff;
+                        clicked => { root.refresh_servers_clicked(); }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 14px;
+
+                    TitleBlock {
+                        title: "服务器列表";
+                        sub: server_status_text;
+                    }
+
+                    ListView {
+                        vertical-stretch: 1;
+
+                        for server in server_rows: ServerLine {
+                            name: server.name;
+                            address: server.address;
+                            meta: server.meta;
+                            state: server.state;
+                            players: server.players;
+                            active: server.active;
+                        }
+                    }
+                }
+            }
+        }
+}

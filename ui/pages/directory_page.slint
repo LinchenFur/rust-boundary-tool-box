@@ -1,0 +1,133 @@
+import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
+import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
+import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, TopSwitch, Txt } from "../components.slint";
+import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+
+export component DirectoryPage inherits Rectangle {
+    in property <bool> has_target;
+    in property <bool> busy;
+    in property <bool> auto_mode;
+    in property <string> manual_path;
+    in property <string> detected_text;
+    in property <string> target_text;
+    callback auto_mode_clicked();
+    callback manual_mode_clicked();
+    callback scan_clicked();
+    callback redetect_clicked();
+    callback browse_clicked();
+    callback manual_path_changed(text: string);
+        // 页面 1：Steam 自动识别、手动路径输入和盘符扫描。
+        HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 360px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "识别方式";
+                        sub: "选择自动识别或手动指定目录";
+                    }
+
+                    NavTab {
+                        label: "自动识别";
+                        selected: auto_mode;
+                        clicked => { root.auto_mode_clicked(); }
+                    }
+
+                    NavTab {
+                        label: "手动选择";
+                        selected: !auto_mode;
+                        clicked => { root.manual_mode_clicked(); }
+                    }
+
+                    Action {
+                        label: "全盘扫描";
+                        sub: "选择盘符后扫描";
+                        enabled: !busy;
+                        accent: #9ef0b5;
+                        clicked => { root.scan_clicked(); }
+                    }
+
+                    Action {
+                        label: "重新检测";
+                        sub: "刷新自动识别结果";
+                        enabled: auto_mode && !busy;
+                        accent: #a8d8ff;
+                        clicked => { root.redetect_clicked(); }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "游戏根目录";
+                        sub: "手动模式下可直接输入或浏览目录";
+                    }
+
+                    InputBox {
+                        enabled: !auto_mode && !busy;
+
+                        LineEdit {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            text: manual_path;
+                            enabled: !auto_mode && !busy;
+                            placeholder-text: "游戏根目录";
+                            font-family: "Microsoft YaHei UI";
+                            font-size: 14px;
+                            edited(text) => { root.manual_path_changed(text); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 54px;
+                        spacing: 12px;
+
+                        Action {
+                            width: 150px;
+                            label: "浏览";
+                            sub: "OPEN";
+                            enabled: !auto_mode && !busy;
+                            accent: #62e2c1;
+                            clicked => { root.browse_clicked(); }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; background: #00000000; }
+                    }
+
+                    InfoBox {
+                        box-height: 128px;
+                        label: "DETECTED";
+                        value: detected_text;
+                        accent: #a8d8ff;
+                    }
+
+                    InfoBox {
+                        box-height: 120px;
+                        label: "TARGET";
+                        value: target_text;
+                        accent: has_target ? #9ef0b5 : #f6c76d;
+                    }
+                }
+            }
+        }
+}
+

@@ -1,0 +1,119 @@
+import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
+import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
+import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, TopSwitch, Txt } from "../components.slint";
+import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+
+export component DiagnosticsPage inherits Rectangle {
+    in property <bool> has_target;
+    in property <bool> busy;
+    in property <bool> show_logs;
+    in property <string> process_status_text;
+    in property <string> log_text;
+    in property <[PortRow]> port_rows;
+    callback detect_processes_clicked();
+    callback stop_processes_clicked();
+    callback toggle_logs_clicked();
+        // 页面 2：进程/端口诊断和会话日志。
+        HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 360px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "进程";
+                        sub: "检测或关闭可能占用端口的进程";
+                    }
+
+                    InfoBox {
+                        box-height: 120px;
+                        label: "PROCESS";
+                        value: process_status_text;
+                        accent: #d7c4ff;
+                    }
+
+                    Action {
+                        label: "进程检测";
+                        sub: "扫描运行进程";
+                        enabled: has_target && !busy;
+                        accent: #d7c4ff;
+                        clicked => { root.detect_processes_clicked(); }
+                    }
+
+                    Action {
+                        label: "关闭进程";
+                        sub: "结束占用进程";
+                        enabled: has_target && !busy;
+                        accent: #f6c76d;
+                        clicked => { root.stop_processes_clicked(); }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        height: 54px;
+                        spacing: 12px;
+
+                        TitleBlock {
+                            horizontal-stretch: 1;
+                            title: show_logs ? "日志" : "端口";
+                            sub: show_logs ? "运行日志输出" : "社区服端口占用状态";
+                        }
+
+                        Action {
+                            width: 140px;
+                            label: show_logs ? "看端口" : "看日志";
+                            sub: "";
+                            enabled: !busy;
+                            accent: #d7c4ff;
+                            clicked => { root.toggle_logs_clicked(); }
+                        }
+                    }
+
+                    if !show_logs : ListView {
+                        vertical-stretch: 1;
+
+                        for port_row[index] in port_rows: PortLine {
+                            label: port_row.label;
+                            detail: port_row.detail;
+                            occupied: port_row.occupied;
+                        }
+                    }
+
+                    if show_logs : ScrollView {
+                        vertical-stretch: 1;
+
+                        Txt {
+                            x: 14px;
+                            y: 14px;
+                            width: parent.width - 28px;
+                            text: log_text;
+                            color: #dbeafe;
+                            font-family: "Consolas";
+                            font-size: 13px;
+                            font-weight: 500;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+}
+

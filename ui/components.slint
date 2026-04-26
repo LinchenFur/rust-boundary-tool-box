@@ -1,0 +1,430 @@
+export component Txt inherits Text {
+    font-family: "Microsoft YaHei UI";
+    letter-spacing: 0px;
+}
+
+// 主页面面板和弹窗主体使用的深色圆角容器。
+export component Panel inherits Rectangle {
+    in property <brush> fill: #151922;
+    in property <brush> stroke: #273041;
+    in property <length> radius: 18px;
+
+    background: fill;
+    border-color: stroke;
+    border-width: 1px;
+    border-radius: radius;
+    clip: true;
+
+    @children
+}
+
+// 页面和面板头部使用的统一标题/副标题块。
+export component TitleBlock inherits Rectangle {
+    in property <string> title;
+    in property <string> sub: "";
+
+    height: sub == "" ? 32px : 52px;
+    background: #00000000;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 3px;
+
+        Txt {
+            text: title;
+            color: #eef4fb;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        if sub != "" : Txt {
+            text: sub;
+            color: #95a3b8;
+            font-size: 12px;
+            font-weight: 500;
+        }
+    }
+}
+
+// 顶部栏展示的紧凑状态标签。
+export component StatusTag inherits Rectangle {
+    in property <string> title;
+    in property <string> sub;
+    in property <brush> accent: #62e2c1;
+
+    height: 42px;
+    min-width: 144px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: #273041;
+    background: #0f131a;
+    opacity: 1.0;
+
+    animate opacity { duration: 420ms; }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 12px;
+        spacing: 9px;
+
+        Rectangle {
+            width: 5px;
+            background: #00000000;
+
+            Rectangle {
+                width: parent.width;
+                height: 24px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 3px;
+                background: accent;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 0px;
+            horizontal-stretch: 1;
+
+            Txt {
+                text: title;
+                color: #eef4fb;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            Txt {
+                text: sub;
+                color: #95a3b8;
+                font-size: 11px;
+                font-weight: 500;
+            }
+        }
+    }
+}
+
+// 所有顶级页面共用的顶部导航按钮。
+export component NavTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected: false;
+    callback clicked;
+
+    height: 42px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: selected ? #62e2c1 : (touch.has-hover ? #54617a : #273041);
+    background: selected ? #103b34 : (touch.has-hover ? #1d2531 : #0f131a);
+
+    animate background { duration: 120ms; }
+    animate border-color { duration: 120ms; }
+
+    Txt {
+        text: label;
+        color: selected ? #c7fff2 : #c7d1df;
+        font-size: 14px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        clicked => { parent.clicked(); }
+    }
+}
+
+// 带竖向强调条的主/次操作按钮。
+export component Action inherits Rectangle {
+    in property <string> label;
+    in property <string> sub: "";
+    in property <bool> enabled: true;
+    in property <bool> primary: false;
+    in property <brush> accent: #62e2c1;
+    callback clicked;
+
+    height: primary ? 88px : 54px;
+    border-radius: primary ? 22px : 14px;
+    border-width: primary ? 0px : 1px;
+    border-color: enabled ? (touch.has-hover ? accent : #344056) : #273041;
+    background: enabled
+        ? (primary
+            ? (touch.pressed ? #43bfa3 : (touch.has-hover ? #82f6da : accent))
+            : (touch.pressed ? #202a38 : (touch.has-hover ? #1d2531 : #0f131a)))
+        : #0f131a88;
+
+    animate background { duration: 140ms; }
+    animate border-color { duration: 140ms; }
+
+    HorizontalLayout {
+        padding-left: primary ? 22px : 14px;
+        padding-right: primary ? 22px : 14px;
+        spacing: 12px;
+
+        Rectangle {
+            width: primary ? 10px : 6px;
+            background: #00000000;
+
+            Rectangle {
+                width: parent.width;
+                height: primary ? 54px : 28px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 4px;
+                background: enabled ? (primary ? #08231d : accent) : #657285;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+
+            Txt {
+                text: label;
+                color: enabled ? (primary ? #08231d : #eef4fb) : #687589;
+                font-size: primary ? 23px : 14px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+            }
+
+            if sub != "" : Txt {
+                text: sub;
+                color: enabled ? (primary ? #08231d : #95a3b8) : #687589;
+                font-size: 12px;
+                font-weight: 500;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: parent.enabled;
+        clicked => { parent.clicked(); }
+    }
+}
+
+// 用于路径、状态和诊断信息的标签+值容器。
+export component InfoBox inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <brush> accent: #62e2c1;
+    in property <length> box-height: 88px;
+
+    height: box-height;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: #273041;
+    background: #0f131a;
+    clip: true;
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            width: 4px;
+            background: accent;
+        }
+
+        VerticalLayout {
+            alignment: start;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 11px;
+            padding-bottom: 11px;
+            spacing: 6px;
+
+            Txt {
+                text: label;
+                color: accent;
+                font-size: 11px;
+                font-weight: 700;
+            }
+
+            Txt {
+                text: value;
+                color: #eef4fb;
+                font-size: 14px;
+                font-weight: 500;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+// 带边框的输入背景；真正的文本编辑交给 LineEdit。
+export component InputBox inherits Rectangle {
+    in property <bool> enabled: true;
+
+    height: 52px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: enabled ? #54617a : #273041;
+    background: enabled ? #0f131a : #0f131a88;
+
+    @children
+}
+
+// 带强调条的设置/状态行。
+export component DetailRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <brush> accent: #62e2c1;
+
+    height: 76px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: #273041;
+    background: #0f131a;
+    clip: true;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 14px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 6px;
+            background: #00000000;
+
+            Rectangle {
+                width: parent.width;
+                height: 40px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 3px;
+                background: accent;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 5px;
+            horizontal-stretch: 1;
+
+            Txt {
+                text: label;
+                color: accent;
+                font-size: 11px;
+                font-weight: 800;
+                horizontal-stretch: 1;
+            }
+
+            Txt {
+                text: value;
+                color: #eef4fb;
+                font-size: 13px;
+                font-weight: 500;
+                wrap: word-wrap;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+}
+
+// 游戏窗口置顶设置的开关。
+export component TopSwitch inherits Rectangle {
+    in property <bool> checked: false;
+    callback toggled(value: bool);
+
+    height: 54px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: checked ? #9ef0b5 : #344056;
+    background: checked ? #0d2d1a : #0f131a;
+
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 14px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: checked ? #9ef0b5 : #8a96a8;
+        }
+
+        Txt {
+            text: checked ? "窗口保持置顶" : "窗口不置顶";
+            color: #eef4fb;
+            font-size: 14px;
+            font-weight: 700;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+        }
+    }
+
+    TouchArea {
+        clicked => { parent.toggled(!parent.checked); }
+    }
+}
+
+// 供 VNT 页面使用的通用双状态选项行。
+export component OptionSwitch inherits Rectangle {
+    in property <bool> checked: false;
+    in property <string> on-label;
+    in property <string> off-label;
+    in property <string> sub;
+    callback toggled(value: bool);
+
+    height: 54px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: checked ? #9ef0b5 : #344056;
+    background: checked ? #0d2d1a : #0f131a;
+
+    animate background { duration: 140ms; }
+    animate border-color { duration: 140ms; }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 14px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 38px;
+            background: #00000000;
+
+            Rectangle {
+                width: 38px;
+                height: 22px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 11px;
+                background: checked ? #9ef0b5 : #344056;
+
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    x: checked ? 19px : 3px;
+                    y: 3px;
+                    border-radius: 8px;
+                    background: checked ? #0b2a18 : #c7d1df;
+
+                    animate x { duration: 120ms; }
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+
+            Txt {
+                text: checked ? on-label : off-label;
+                color: #eef4fb;
+                font-size: 14px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+            }
+
+            Txt {
+                text: sub;
+                color: #95a3b8;
+                font-size: 11px;
+                font-weight: 500;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+
+    TouchArea {
+        clicked => { parent.toggled(!parent.checked); }
+    }
+}

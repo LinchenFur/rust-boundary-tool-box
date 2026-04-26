@@ -45,10 +45,7 @@ fn main() -> Result<()> {
     for asset in icon_asset_candidates(&manifest_dir, project_root) {
         println!("cargo:rerun-if-changed={}", asset.display());
     }
-    println!(
-        "cargo:rerun-if-changed={}",
-        manifest_dir.join("ui").join("appwindow.slint").display()
-    );
+    emit_ui_rerun(&manifest_dir)?;
     if let Some(payload_root) = &payload_root {
         for item in MANAGED_ITEMS {
             println!(
@@ -63,6 +60,21 @@ fn main() -> Result<()> {
     }
 
     embed_windows_icon(&out_dir)?;
+    Ok(())
+}
+
+/// 递归监听 Slint UI 文件，避免拆分后的子文件变更被 Cargo 缓存漏掉。
+fn emit_ui_rerun(manifest_dir: &Path) -> Result<()> {
+    let ui_dir = manifest_dir.join("ui");
+    for entry in WalkDir::new(&ui_dir)
+        .into_iter()
+        .filter_map(std::result::Result::ok)
+    {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "slint") {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
     Ok(())
 }
 

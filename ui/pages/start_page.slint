@@ -1,0 +1,132 @@
+import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
+import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
+import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, TopSwitch, Txt } from "../components.slint";
+import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+
+export component StartPage inherits Rectangle {
+    in property <bool> has_target;
+    in property <bool> busy;
+    in property <bool> auto_mode;
+    in property <string> status_text;
+    in property <string> target_text;
+    in property <string> detected_text;
+    callback launch_clicked();
+    callback install_clicked();
+    callback uninstall_clicked();
+    callback scan_clicked();
+    callback goto_directory();
+        // 页面 0：启动和快捷安装/卸载操作。
+        HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 470px;
+                vertical-stretch: 1;
+                radius: 26px;
+                fill: #172032;
+                stroke: #344056;
+
+                VerticalLayout {
+                    padding: 28px;
+                    spacing: 20px;
+
+                    TitleBlock {
+                        title: "启动";
+                        sub: has_target ? "目录已准备，可以直接启动游戏" : "先完成目录识别后再启动";
+                    }
+
+                    Action {
+                        label: "启动游戏";
+                        sub: has_target ? "使用当前目标目录启动 Boundary" : "等待有效游戏根目录";
+                        primary: true;
+                        enabled: has_target && !busy;
+                        accent: #62e2c1;
+                        clicked => { root.launch_clicked(); }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: "安装";
+                            sub: "写入社区服文件";
+                            enabled: has_target && !busy;
+                            accent: #9ef0b5;
+                            clicked => { root.install_clicked(); }
+                        }
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: "卸载";
+                            sub: "移除已安装文件";
+                            enabled: has_target && !busy;
+                            accent: #ffb4ab;
+                            clicked => { root.uninstall_clicked(); }
+                        }
+                    }
+
+                    InfoBox {
+                        box-height: 96px;
+                        label: "TASK";
+                        value: status_text;
+                        accent: busy ? #ffb4ab : #9ef0b5;
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 28px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "当前目标";
+                        sub: auto_mode ? "自动识别" : "手动选择";
+                    }
+
+                    InfoBox {
+                        box-height: 132px;
+                        label: "TARGET";
+                        value: target_text;
+                        accent: has_target ? #9ef0b5 : #f6c76d;
+                    }
+
+                    InfoBox {
+                        box-height: 132px;
+                        label: "DETECTED";
+                        value: detected_text;
+                        accent: #a8d8ff;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: "去目录页";
+                            sub: "修改或重新识别目录";
+                            accent: #a8d8ff;
+                            clicked => { root.goto_directory(); }
+                        }
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: "全盘扫描";
+                            sub: "查找游戏目录";
+                            enabled: !busy;
+                            accent: #9ef0b5;
+                            clicked => { root.scan_clicked(); }
+                        }
+                    }
+                }
+            }
+        }
+}
+
