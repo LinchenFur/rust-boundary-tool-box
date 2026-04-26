@@ -1,8 +1,8 @@
-//! Native VNT integration used by the "联机" page.
+//! “联机”页面使用的原生 VNT 集成。
 //!
-//! The vendored VNT v2 source is linked as Rust crates. This wrapper keeps the
-//! UI-facing API small: start with options, emit snapshots/events, and stop
-//! through a oneshot channel. No web UI or webview is involved.
+//! 本地并入的 VNT v2 源码以 Rust crate 形式链接。这个封装让面向 UI 的
+//! 对外 API 保持很小：带选项启动、发出快照/事件、通过 oneshot channel 停止。
+//! 整个流程不涉及 web UI 或 webview。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use vnt_core::tunnel_core::server::transport::config::ProtocolAddress;
 use vnt_core::utils::task_control::TaskGroupManager;
 use vnt_ipc as vnt_core;
 
-/// User-provided launch options for the VNT core.
+/// 用户提供给 VNT 核心的启动选项。
 #[derive(Debug, Clone)]
 pub struct VntLaunchOptions {
     pub server_text: String,
@@ -30,7 +30,7 @@ pub struct VntLaunchOptions {
     pub no_punch: bool,
 }
 
-/// One peer/client row displayed in the UI.
+/// 在 UI 中展示的单个节点/客户端行。
 #[derive(Debug, Clone)]
 pub struct VntPeer {
     pub name: String,
@@ -39,7 +39,7 @@ pub struct VntPeer {
     pub online: bool,
 }
 
-/// UI snapshot of the current VNT network state.
+/// 当前 VNT 网络状态的 UI 快照。
 #[derive(Debug, Clone)]
 pub struct VntSnapshot {
     pub running: bool,
@@ -54,7 +54,7 @@ pub struct VntSnapshot {
     pub peers: Vec<VntPeer>,
 }
 
-/// Events emitted from the VNT worker thread to the Slint controller.
+/// 由 VNT 工作线程发给 Slint 控制器的事件。
 #[derive(Debug, Clone)]
 pub enum VntEvent {
     Snapshot(VntSnapshot),
@@ -64,16 +64,15 @@ pub enum VntEvent {
 
 type EventSink = Arc<dyn Fn(VntEvent) + Send + Sync + 'static>;
 
-/// Running VNT session handle.
+/// 正在运行的 VNT 会话句柄。
 ///
-/// Dropping this object requests shutdown, which prevents the native core from
-/// surviving after the window closes.
+/// 丢弃该对象会请求关闭，避免窗口关闭后原生核心继续存活。
 pub struct VntSession {
     stop_tx: Option<oneshot::Sender<()>>,
 }
 
 impl VntSession {
-    /// Starts VNT on a dedicated OS thread with its own Tokio runtime.
+    /// 在独立 OS 线程上启动 VNT，并使用自己的 Tokio runtime。
     pub fn start(options: VntLaunchOptions, sink: EventSink) -> Result<Self> {
         validate_options(&options)?;
         let (stop_tx, stop_rx) = oneshot::channel();
@@ -94,7 +93,7 @@ impl VntSession {
         })
     }
 
-    /// Requests graceful shutdown. Final state arrives through VntEvent::Stopped.
+    /// 请求优雅关闭；最终状态会通过 VntEvent::Stopped 返回。
     pub fn stop(&mut self) {
         if let Some(stop_tx) = self.stop_tx.take() {
             let _ = stop_tx.send(());
@@ -108,7 +107,7 @@ impl Drop for VntSession {
     }
 }
 
-/// Disconnected state used for first render and after shutdown.
+/// 首次渲染和关闭后使用的未连接状态。
 pub fn idle_snapshot() -> VntSnapshot {
     VntSnapshot {
         running: false,
@@ -129,7 +128,7 @@ pub fn idle_snapshot() -> VntSnapshot {
     }
 }
 
-/// Splits a user-entered server list across common separators.
+/// 按常见分隔符拆分用户输入的服务器列表。
 pub fn split_servers(raw: &str) -> Vec<String> {
     raw.split(['\n', '\r', '\t', ' ', ',', ';', '，', '；'])
         .map(str::trim)
@@ -138,7 +137,7 @@ pub fn split_servers(raw: &str) -> Vec<String> {
         .collect()
 }
 
-/// Validates required fields before any background thread is spawned.
+/// 在创建后台线程前校验必填字段。
 fn validate_options(options: &VntLaunchOptions) -> Result<()> {
     if split_servers(&options.server_text).is_empty() {
         bail!("请填写 VNT 服务器地址。");
@@ -152,7 +151,7 @@ fn validate_options(options: &VntLaunchOptions) -> Result<()> {
     Ok(())
 }
 
-/// Owns the Tokio runtime so the Slint UI thread stays synchronous.
+/// 持有 Tokio runtime，使 Slint UI 线程保持同步模型。
 fn run_vnt_thread(
     options: VntLaunchOptions,
     stop_rx: oneshot::Receiver<()>,
@@ -167,7 +166,7 @@ fn run_vnt_thread(
     runtime.block_on(run_vnt(options, stop_rx, sink))
 }
 
-/// Runs the VNT core lifecycle: configure, register, start TUN, poll status.
+/// 运行 VNT 核心生命周期：配置、注册、启动 TUN、轮询状态。
 async fn run_vnt(
     options: VntLaunchOptions,
     mut stop_rx: oneshot::Receiver<()>,
@@ -183,7 +182,7 @@ async fn run_vnt(
     }));
 
     if !options.no_tun {
-        // VNT loads wintun.dll from the process directory on Windows.
+        // 在 Windows 上，VNT 会从进程目录加载 wintun.dll。
         extract_wintun_dll().context("准备 wintun.dll 失败")?;
     }
 
@@ -243,8 +242,7 @@ async fn run_vnt(
     };
 
     if !network_manager.is_no_tun() {
-        // Registration returns the virtual IP; only then can the local adapter
-        // be started and assigned its network address.
+        // 注册后才会拿到虚拟 IP，之后才能启动本地网卡并分配网络地址。
         sink(VntEvent::Snapshot(VntSnapshot {
             busy: true,
             status: "创建网卡".to_string(),
@@ -274,7 +272,7 @@ async fn run_vnt(
     let status_api = api.clone();
     let status_sink = sink.clone();
     let status_handle = tokio::spawn(async move {
-        // Poll VNT API periodically and keep the UI model current.
+        // 定期轮询 VNT API，让 UI 模型保持最新。
         loop {
             status_sink(VntEvent::Snapshot(snapshot_from_api(
                 &status_api,
@@ -300,8 +298,7 @@ async fn run_vnt(
         }
     }
 
-    // Stop the polling task before dropping NetworkManager so no snapshot reads
-    // race with teardown.
+    // 在丢弃 NetworkManager 前先停止轮询任务，避免快照读取和清理过程竞争。
     status_handle.abort();
     let _ = status_handle.await;
     drop(network_manager);
@@ -310,7 +307,7 @@ async fn run_vnt(
     Ok(())
 }
 
-/// Converts UI options into the config expected by the VNT core.
+/// 将 UI 选项转换为 VNT 核心需要的配置。
 fn build_config(options: &VntLaunchOptions) -> Result<Config> {
     let server_addr = split_servers(&options.server_text)
         .into_iter()
@@ -334,7 +331,7 @@ fn build_config(options: &VntLaunchOptions) -> Result<Config> {
         device_name: default_device_name(),
         tun_name: Some("boundary-vnt".to_string()),
         password,
-        // The bundled VNT defaults use this mode for public community servers.
+        // 内置 VNT 默认以该模式连接公共社区服务器。
         cert_mode: CertValidationMode::InsecureSkipVerification,
         no_punch: options.no_punch,
         compress: options.compress,
@@ -344,7 +341,7 @@ fn build_config(options: &VntLaunchOptions) -> Result<Config> {
     })
 }
 
-/// Reads live state from VNT's API and shapes it for the UI.
+/// 从 VNT API 读取实时状态，并整理成 UI 所需结构。
 fn snapshot_from_api(
     api: &vnt_core::api::VntApi,
     busy: bool,
@@ -377,8 +374,7 @@ fn snapshot_from_api(
         clients
             .into_iter()
             .map(|client| {
-                // Route/RTT are best-effort diagnostics; missing values should
-                // not make the whole snapshot fail.
+                // 路由和 RTT 是尽力而为的诊断信息，缺失时不应导致整个快照失败。
                 let rtt = api
                     .get_rtt(&client.ip)
                     .map(|value| format!("{value} ms"))
@@ -456,7 +452,7 @@ fn snapshot_from_api(
     }
 }
 
-/// Stable device display name used in the VNT network.
+/// 在 VNT 网络内使用的稳定设备显示名。
 fn default_device_name() -> String {
     let host = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
@@ -465,7 +461,7 @@ fn default_device_name() -> String {
 }
 
 #[cfg(windows)]
-/// Extracts the bundled wintun.dll next to the executable when TUN mode is used.
+/// 使用 TUN 模式时，把内置 wintun.dll 解压到可执行文件旁边。
 fn extract_wintun_dll() -> Result<()> {
     #[cfg(target_arch = "x86_64")]
     const WINTUN_DLL: &[u8] = include_bytes!("../vendor/vnt/dll/amd64/wintun.dll");
@@ -489,7 +485,7 @@ fn extract_wintun_dll() -> Result<()> {
 }
 
 #[cfg(not(windows))]
-/// Non-Windows builds do not need a bundled Wintun DLL.
+/// 非 Windows 构建不需要内置 Wintun DLL。
 fn extract_wintun_dll() -> Result<()> {
     Ok(())
 }

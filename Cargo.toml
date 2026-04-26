@@ -1,40 +1,40 @@
 [package]
-# Native Slint/Rust rewrite of the Boundary community-server toolbox.
+# 这是 Boundary 社区服工具箱的原生 Slint/Rust 重写版。
 name = "boundary_toolbox"
 version = "1.2.0"
 edition = "2024"
 build = "build.rs"
 
 [dependencies]
-# Error handling and timestamps used across installer/core logic.
+# 安装器与核心逻辑使用的错误处理和时间戳。
 anyhow = "1.0.100"
 chrono = { version = "0.4.42", features = ["serde"] }
-# UI controller message channel between worker threads and Slint.
+# 工作线程与 Slint 控制器之间的消息通道。
 crossbeam-channel = "0.5.15"
-# Build script icon generation.
+# 构建脚本生成图标时使用。
 image = { version = "0.25.8", default-features = true, features = ["jpeg", "png", "ico"] }
-# Runtime diagnostics for required TCP/UDP ports.
+# 运行时诊断需要检查 TCP/UDP 端口。
 netstat2 = "0.11.2"
 regex = "1.12.2"
-# Blocking HTTPS client used only for ProjectRebound online updates.
+# 阻塞式 HTTPS 客户端，仅用于 ProjectRebound 在线更新。
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
-# Native UI toolkit; no webview dependency.
+# 原生 UI 工具包，不引入 webview 依赖。
 slint = "1.16.0"
 sysinfo = "0.38.4"
-# Tokio runtime is used by the embedded VNT core.
+# 嵌入式 VNT 核心需要 Tokio 运行时。
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "sync", "time"] }
 uuid = { version = "1.18.1", features = ["v4"] }
-# Vendored VNT v2 source used for the native multiplayer page.
+# 本地并入的 VNT v2 源码，用于原生联机页。
 vnt-ipc = { path = "vendor/vnt/vnt-ipc" }
 walkdir = "2.5.0"
 winreg = "0.56.0"
 zip = { version = "8.5.1", default-features = true, features = ["deflate"] }
 
 [dependencies.windows]
-# Win32 APIs for topmost watcher, hotkeys, and atomic file replacement.
+# 使用 Win32 API 实现窗口置顶守护、快捷键和原子文件替换。
 version = "0.62.2"
 features = [
   "Win32_Foundation",
@@ -45,7 +45,7 @@ features = [
 ]
 
 [build-dependencies]
-# build.rs compiles Slint, embeds payload.zip, and creates the Windows icon.
+# 构建脚本 build.rs 负责编译 Slint、嵌入 payload.zip 并生成 Windows 图标。
 anyhow = "1.0.100"
 embed-resource = "3.0.6"
 image = { version = "0.25.8", default-features = true, features = ["jpeg", "png", "ico"] }

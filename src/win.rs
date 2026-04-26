@@ -1,8 +1,7 @@
-//! Windows-specific helpers for global hotkeys and topmost game-window control.
+//! 面向 Windows 的全局快捷键和游戏窗口置顶辅助逻辑。
 //!
-//! The main application starts a hidden watcher process after launching the
-//! game. That watcher finds the game window, optionally keeps it topmost, and
-//! listens for a global hotkey to toggle the behavior.
+//! 主应用启动游戏后会拉起一个隐藏守护进程。守护进程负责寻找游戏窗口，
+//! 按配置保持置顶，并监听全局快捷键来切换该行为。
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -26,7 +25,7 @@ use crate::core::{
 
 const HOTKEY_ID: i32 = 0x5045_5645;
 
-/// Normalized global hotkey definition ready for RegisterHotKey.
+/// 已规范化、可直接传给 RegisterHotKey 的全局快捷键定义。
 #[derive(Debug, Clone)]
 pub struct HotkeyDefinition {
     pub normalized: String,
@@ -34,7 +33,7 @@ pub struct HotkeyDefinition {
     pub vk_code: u32,
 }
 
-/// Parses user-facing hotkey text such as Ctrl+Alt+F10.
+/// 解析用户可读的快捷键文本，例如 Ctrl+Alt+F10。
 pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
     let raw = if value.trim().is_empty() {
         DEFAULT_TOPMOST_HOTKEY
@@ -57,7 +56,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
 
     for token in tokens {
         let lower = token.to_lowercase();
-        // Modifiers can appear in any order but are normalized later.
+        // 修饰键可以任意排序，稍后会统一规范化。
         let modifier = match lower.as_str() {
             "ctrl" | "control" => Some(("Ctrl", MOD_CONTROL.0)),
             "alt" => Some(("Alt", MOD_ALT.0)),
@@ -79,7 +78,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
         }
 
         if token.len() == 1 {
-            // Single ASCII letters/digits map directly to virtual-key codes.
+            // 单个 ASCII 字母或数字可直接映射到虚拟键码。
             let ch = token.chars().next().unwrap();
             if ch.is_ascii_alphabetic() {
                 main_label = Some(ch.to_ascii_uppercase().to_string());
@@ -93,7 +92,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
             }
         }
 
-        // Function keys use the contiguous VK_F1..VK_F24 range.
+        // 功能键使用连续的 VK_F1..VK_F24 范围。
         if lower.starts_with('f') && lower[1..].chars().all(|ch| ch.is_ascii_digit()) {
             let number = lower[1..].parse::<u32>()?;
             if (1..=24).contains(&number) {
@@ -103,7 +102,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
             }
         }
 
-        // Named keys are limited to the set useful for a simple toggle shortcut.
+        // 命名按键限制在简单切换快捷键常用的集合内。
         let special = match lower.as_str() {
             "space" => Some(("Space", 0x20)),
             "tab" => Some(("Tab", 0x09)),
@@ -132,8 +131,8 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
     let Some(vk_code) = vk_code else {
         bail!("快捷键缺少主键，请使用类似 Ctrl+Alt+F10 的格式。");
     };
-    // Store modifiers in a stable order so the UI does not bounce between
-    // equivalent strings like Alt+Ctrl+F10 and Ctrl+Alt+F10.
+    // 以稳定顺序存储修饰键，避免 UI 在 Alt+Ctrl+F10 和 Ctrl+Alt+F10
+    // 这类等价字符串之间来回变化。
     let ordered = ["Ctrl", "Alt", "Shift", "Win"]
         .into_iter()
         .filter(|label| seen.contains(&label.to_string()))
@@ -147,7 +146,7 @@ pub fn parse_hotkey_text(value: &str) -> Result<HotkeyDefinition> {
     })
 }
 
-/// Top-level native window candidate found during enumeration.
+/// 枚举时找到的顶层原生窗口候选项。
 #[derive(Debug, Clone)]
 struct WindowCandidate {
     hwnd: HWND,
@@ -155,7 +154,7 @@ struct WindowCandidate {
     pid: u32,
 }
 
-/// Watches one game process and toggles topmost state through a global hotkey.
+/// 监控一个游戏进程，并通过全局快捷键切换置顶状态。
 pub fn watch_window_by_pid(process_id: u32, keep_topmost: bool, hotkey_text: &str) -> Result<i32> {
     let hotkey = parse_hotkey_text(hotkey_text)?;
     let mut hotkey_registered = false;
@@ -172,8 +171,8 @@ pub fn watch_window_by_pid(process_id: u32, keep_topmost: bool, hotkey_text: &st
     let mut last_toggle_state: Option<bool> = None;
 
     loop {
-        // The watcher is a hidden process with its own message queue. Polling
-        // WM_HOTKEY keeps the logic simple and avoids a visible window.
+        // 守护进程是隐藏进程，拥有自己的消息队列。轮询 WM_HOTKEY
+        // 可以让逻辑保持简单，同时不需要可见窗口。
         while consume_hotkey_messages()? {
             topmost_enabled = !topmost_enabled;
             if let Some(current_hwnd) = hwnd {
@@ -187,8 +186,7 @@ pub fn watch_window_by_pid(process_id: u32, keep_topmost: bool, hotkey_text: &st
 
         let window_exists = hwnd.is_some_and(|handle| unsafe { IsWindow(Some(handle)).as_bool() });
         if !window_exists {
-            // First try the exact game PID; fallback covers launchers that spawn
-            // a child window under another process.
+            // 优先按精确游戏 PID 查找；兜底逻辑覆盖启动器把窗口放到子进程的情况。
             hwnd = find_window_by_pid(process_id).or_else(find_boundary_window_fallback);
             if hwnd.is_some() {
                 last_seen_window = Instant::now();
@@ -230,7 +228,7 @@ pub fn watch_window_by_pid(process_id: u32, keep_topmost: bool, hotkey_text: &st
     Ok(0)
 }
 
-/// Drains WM_HOTKEY messages from the watcher thread queue.
+/// 从守护线程消息队列中取出 WM_HOTKEY 消息。
 fn consume_hotkey_messages() -> Result<bool> {
     let mut consumed = false;
     unsafe {
@@ -246,7 +244,7 @@ fn consume_hotkey_messages() -> Result<bool> {
     Ok(consumed)
 }
 
-/// Finds the first visible window owned by a process ID.
+/// 查找指定进程 ID 拥有的第一个可见窗口。
 fn find_window_by_pid(process_id: u32) -> Option<HWND> {
     enum_windows()
         .into_iter()
@@ -254,7 +252,7 @@ fn find_window_by_pid(process_id: u32) -> Option<HWND> {
         .map(|window| window.hwnd)
 }
 
-/// Fallback title scan for cases where the visible game window has a child PID.
+/// 当可见游戏窗口属于子 PID 时，通过标题扫描兜底。
 fn find_boundary_window_fallback() -> Option<HWND> {
     enum_windows().into_iter().find_map(|window| {
         let title = window.title.to_lowercase();
@@ -266,7 +264,7 @@ fn find_boundary_window_fallback() -> Option<HWND> {
     })
 }
 
-/// Enumerates visible top-level windows with titles and process IDs.
+/// 枚举带标题和进程 ID 的可见顶层窗口。
 fn enum_windows() -> Vec<WindowCandidate> {
     unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let windows = unsafe { &mut *(lparam.0 as *mut Vec<WindowCandidate>) };
@@ -303,7 +301,7 @@ fn enum_windows() -> Vec<WindowCandidate> {
     windows
 }
 
-/// Restores/focuses a window and applies topmost; can optionally release it.
+/// 恢复并聚焦窗口后应用置顶；也可以按需解除置顶。
 fn force_window_topmost(hwnd: HWND, keep_topmost: bool) -> Result<()> {
     unsafe {
         let _ = ShowWindow(hwnd, SW_RESTORE);
@@ -332,7 +330,7 @@ fn force_window_topmost(hwnd: HWND, keep_topmost: bool) -> Result<()> {
     Ok(())
 }
 
-/// Changes topmost state without stealing focus.
+/// 在不抢占焦点的情况下修改置顶状态。
 fn set_window_topmost_enabled(hwnd: HWND, enabled: bool) -> Result<()> {
     unsafe {
         SetWindowPos(

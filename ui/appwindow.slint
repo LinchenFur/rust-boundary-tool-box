@@ -1,11 +1,11 @@
-// Main Slint UI for the Boundary toolbox.
+// 这是 Boundary 工具箱的主 Slint UI。
 //
-// Rust owns state and side effects. This file keeps the native UI declarative:
-// data rows, reusable controls, page layouts, and custom in-app modals.
+// 由 Rust 负责状态和副作用；本文件只保留声明式原生 UI：
+// 数据行、复用控件、页面布局和自定义应用内弹窗。
 
 import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
 
-// ----- Data rows passed from Rust models -----
+// ----- Rust 模型传入的数据行 -----
 
 export struct PortRow {
     label: string,
@@ -34,14 +34,14 @@ export struct VntPeerRow {
     online: bool,
 }
 
-// ----- Shared visual primitives -----
+// ----- 共享视觉基础组件 -----
 
 component Txt inherits Text {
     font-family: "Microsoft YaHei UI";
     letter-spacing: 0px;
 }
 
-// Dark rounded surface used for main page panels and modal bodies.
+// 主页面面板和弹窗主体使用的深色圆角容器。
 component Panel inherits Rectangle {
     in property <brush> fill: #151922;
     in property <brush> stroke: #273041;
@@ -56,7 +56,7 @@ component Panel inherits Rectangle {
     @children
 }
 
-// Consistent title/subtitle block for page and panel headers.
+// 页面和面板头部使用的统一标题/副标题块。
 component TitleBlock inherits Rectangle {
     in property <string> title;
     in property <string> sub: "";
@@ -84,7 +84,7 @@ component TitleBlock inherits Rectangle {
     }
 }
 
-// Compact status pill shown in the header.
+// 顶部栏展示的紧凑状态标签。
 component StatusTag inherits Rectangle {
     in property <string> title;
     in property <string> sub;
@@ -140,7 +140,7 @@ component StatusTag inherits Rectangle {
     }
 }
 
-// Header navigation button used for all top-level pages.
+// 所有顶级页面共用的顶部导航按钮。
 component NavTab inherits Rectangle {
     in property <string> label;
     in property <bool> selected: false;
@@ -169,7 +169,7 @@ component NavTab inherits Rectangle {
     }
 }
 
-// Primary/secondary command button with a vertical accent marker.
+// 带竖向强调条的主/次操作按钮。
 component Action inherits Rectangle {
     in property <string> label;
     in property <string> sub: "";
@@ -238,7 +238,7 @@ component Action inherits Rectangle {
     }
 }
 
-// Label + value container for paths, status, and diagnostics.
+// 用于路径、状态和诊断信息的标签+值容器。
 component InfoBox inherits Rectangle {
     in property <string> label;
     in property <string> value;
@@ -286,7 +286,7 @@ component InfoBox inherits Rectangle {
     }
 }
 
-// Framed input background; actual text editing is delegated to LineEdit.
+// 带边框的输入背景；真正的文本编辑交给 LineEdit。
 component InputBox inherits Rectangle {
     in property <bool> enabled: true;
 
@@ -299,7 +299,7 @@ component InputBox inherits Rectangle {
     @children
 }
 
-// Settings/status row with an accent marker.
+// 带强调条的设置/状态行。
 component DetailRow inherits Rectangle {
     in property <string> label;
     in property <string> value;
@@ -355,7 +355,7 @@ component DetailRow inherits Rectangle {
     }
 }
 
-// One diagnostics port row.
+// 单个诊断端口行。
 component PortLine inherits Rectangle {
     in property <string> label;
     in property <string> detail;
@@ -422,7 +422,7 @@ component PortLine inherits Rectangle {
     }
 }
 
-// One remote community server row.
+// 单个远程社区服行。
 component ServerLine inherits Rectangle {
     in property <string> name;
     in property <string> address;
@@ -509,7 +509,7 @@ component ServerLine inherits Rectangle {
     }
 }
 
-// One drive row in the custom full-scan dialog.
+// 自定义全盘扫描弹窗中的单个盘符行。
 component DriveLine inherits Rectangle {
     in property <string> label;
     in property <bool> checked: false;
@@ -579,7 +579,7 @@ component DriveLine inherits Rectangle {
     }
 }
 
-// Toggle for the game-window topmost setting.
+// 游戏窗口置顶设置的开关。
 component TopSwitch inherits Rectangle {
     in property <bool> checked: false;
     callback toggled(value: bool);
@@ -617,7 +617,7 @@ component TopSwitch inherits Rectangle {
     }
 }
 
-// Generic two-state option row used by the VNT page.
+// 供 VNT 页面使用的通用双状态选项行。
 component OptionSwitch inherits Rectangle {
     in property <bool> checked: false;
     in property <string> on-label;
@@ -691,7 +691,7 @@ component OptionSwitch inherits Rectangle {
     }
 }
 
-// One VNT peer row shown after the native VNT core starts.
+// 原生 VNT 核心启动后展示的单个节点行。
 component VntPeerLine inherits Rectangle {
     in property <string> name;
     in property <string> address;
@@ -758,7 +758,7 @@ component VntPeerLine inherits Rectangle {
     }
 }
 
-// ----- Application window -----
+// ----- 应用窗口 -----
 
 export component AppWindow inherits Window {
     title: "边境社区服工具箱";
@@ -766,11 +766,10 @@ export component AppWindow inherits Window {
     height: 780px;
     background: #0b0e13;
 
-    // Page index: 0 launch, 1 directory, 2 diagnostics, 3 settings,
-    // 4 servers, 5 VNT multiplayer.
+    // 页面索引：0 启动，1 目录，2 诊断，3 设置，4 服务器，5 VNT 联机。
     property <int> page: 0;
 
-    // Directory/install state shared by the launch and directory pages.
+    // 启动页和目录页共享的目录/安装状态。
     in-out property <string> payload_label: "";
     in-out property <string> detected_text: "正在检测 Steam 安装目录...";
     in-out property <string> manual_path: "";
@@ -797,11 +796,11 @@ export component AppWindow inherits Window {
     in-out property <string> app_dialog_secondary_text: "取消";
     in-out property <bool> has_target: false;
 
-    // Remote community server list state.
+    // 远程社区服列表状态。
     in-out property <bool> servers_loading: false;
     in-out property <string> server_status_text: "服务器列表：未刷新";
 
-    // VNT multiplayer state and options.
+    // 用于 VNT 联机的状态和选项。
     in-out property <string> vnt_server_text: "101.35.230.139:6660";
     in-out property <string> vnt_network_code: "";
     in-out property <string> vnt_password: "";
@@ -817,13 +816,13 @@ export component AppWindow inherits Window {
     in-out property <string> vnt_nat_text: "-";
     in-out property <string> vnt_peer_summary_text: "0 个节点";
 
-    // List models are owned by Rust and updated in place.
+    // 列表模型由 Rust 持有并原地更新。
     in-out property <[PortRow]> port_rows;
     in-out property <[DriveRow]> drive_rows;
     in-out property <[ServerRow]> server_rows;
     in-out property <[VntPeerRow]> vnt_peer_rows;
 
-    // Directory selection callbacks.
+    // 目录选择回调。
     callback browse_clicked();
     callback redetect_clicked();
     callback scan_clicked();
@@ -831,12 +830,12 @@ export component AppWindow inherits Window {
     callback manual_mode_clicked();
     callback manual_path_changed(text: string);
 
-    // Settings callbacks.
+    // 设置回调。
     callback keep_topmost_toggled(value: bool);
     callback hotkey_text_changed(text: string);
     callback hotkey_captured(text: string, control: bool, alt: bool, shift: bool, meta: bool);
 
-    // Core action callbacks.
+    // 核心操作回调。
     callback install_clicked();
     callback uninstall_clicked();
     callback launch_clicked();
@@ -844,14 +843,14 @@ export component AppWindow inherits Window {
     callback stop_processes_clicked();
     callback open_logs_clicked();
 
-    // Remote server and VNT callbacks.
+    // 远程服务器和 VNT 回调。
     callback refresh_servers_clicked();
     callback vnt_start_clicked();
     callback vnt_stop_clicked();
     callback vnt_refresh_clicked();
     callback toggle_logs_clicked();
 
-    // Custom modal callbacks.
+    // 自定义弹窗回调。
     callback drive_toggled(index: int, checked: bool);
     callback drive_confirmed();
     callback drive_cancelled();
@@ -862,7 +861,7 @@ export component AppWindow inherits Window {
         padding: 18px;
         spacing: 14px;
 
-        // Header: brand, navigation tabs, and target readiness.
+        // 顶部栏：品牌、导航标签和目标目录就绪状态。
         HorizontalLayout {
             height: 64px;
             spacing: 14px;
@@ -949,7 +948,7 @@ export component AppWindow inherits Window {
             vertical-stretch: 1;
             background: #00000000;
 
-        // Page 0: launch and quick install/uninstall actions.
+        // 页面 0：启动和快捷安装/卸载操作。
         if page == 0 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1063,7 +1062,7 @@ export component AppWindow inherits Window {
             }
         }
 
-        // Page 1: Steam auto-detection, manual path input, and drive scan.
+        // 页面 1：Steam 自动识别、手动路径输入和盘符扫描。
         if page == 1 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1177,7 +1176,7 @@ export component AppWindow inherits Window {
             }
         }
 
-        // Page 2: process/port diagnostics and session logs.
+        // 页面 2：进程/端口诊断和会话日志。
         if page == 2 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1280,7 +1279,7 @@ export component AppWindow inherits Window {
             }
         }
 
-        // Page 5: native VNT multiplayer platform.
+        // 页面 5：原生 VNT 联机平台。
         if page == 5 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1529,7 +1528,7 @@ export component AppWindow inherits Window {
             }
         }
 
-        // Page 3: topmost behavior, hotkey capture, and detailed state.
+        // 页面 3：置顶行为、快捷键捕获和详细状态。
         if page == 3 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1557,8 +1556,7 @@ export component AppWindow inherits Window {
                         focus-on-tab-navigation: false;
 
                         key-pressed(event) => {
-                            // Rust normalizes the captured key text and
-                            // handles Esc as "cancel listening".
+                            // 由 Rust 负责规范化捕获到的按键文本，并把 Esc 视为取消监听。
                             if hotkey_listening && !event.repeat {
                                 root.hotkey_captured(
                                     event.text,
@@ -1646,7 +1644,7 @@ export component AppWindow inherits Window {
             }
         }
 
-        // Page 4: remote community server list from the JSON endpoint.
+        // 页面 4：来自 JSON 接口的远程社区服列表。
         if page == 4 : HorizontalLayout {
             width: parent.width;
             height: parent.height;
@@ -1714,8 +1712,8 @@ export component AppWindow inherits Window {
         }
     }
 
-    // Custom drive picker. This replaces native folder/drive dialogs so the
-    // visual language stays consistent inside Slint.
+    // 自定义盘符选择器。它替代系统原生文件夹/盘符弹窗，
+    // 保证 Slint 内部的视觉语言一致。
     if show_drive_dialog : Rectangle {
         width: parent.width;
         height: parent.height;
@@ -1784,7 +1782,7 @@ export component AppWindow inherits Window {
         }
     }
 
-    // Shared app modal for info, error, confirm, and path-input flows.
+    // 信息、错误、确认和路径输入流程共用的应用内弹窗。
     if show_app_dialog : Rectangle {
         width: parent.width;
         height: parent.height;

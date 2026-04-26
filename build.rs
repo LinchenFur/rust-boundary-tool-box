@@ -1,10 +1,8 @@
-//! Build-time asset pipeline for the toolbox.
+//! 工具箱的构建期资源流水线。
 //!
-//! The executable embeds the original Python toolbox payload as a zip, compiles
-//! the Slint UI, and generates a Windows icon. Public/source-only builds are
-//! allowed to compile without private payload files; in that case the embedded
-//! zip is intentionally empty and runtime installation will fail fast with a
-//! clear validation error.
+//! 可执行文件会把原 Python 工具箱载荷打成 zip 内嵌，编译 Slint UI，
+//! 并生成 Windows 图标。公开仓库或纯源码构建允许缺少私有载荷文件，
+//! 这种情况下内嵌 zip 会保持为空，真正执行安装时会通过运行时校验快速失败。
 
 use std::env;
 use std::fs::File;
@@ -28,15 +26,14 @@ const MANAGED_ITEMS: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
-    // Cargo gives build scripts paths through environment variables. Keep all
-    // generated artifacts inside OUT_DIR so normal builds never dirty the repo.
+    // 构建系统 Cargo 通过环境变量把路径传给构建脚本；生成物全部放进 OUT_DIR，
+    // 避免普通构建污染仓库。
     let manifest_dir =
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").context("missing CARGO_MANIFEST_DIR")?);
     let project_root = manifest_dir.parent().unwrap_or(&manifest_dir);
     let out_dir = PathBuf::from(env::var("OUT_DIR").context("missing OUT_DIR")?);
 
-    // Payload discovery supports local development beside the original Python
-    // project and CI/public builds where only the Rust source is present.
+    // 载荷发现同时兼容原 Python 项目旁边的本地开发，以及只有 Rust 源码的公开构建。
     let payload_root = find_payload_root(&manifest_dir)
         .or_else(|_| find_payload_root(project_root))
         .ok();
@@ -69,9 +66,9 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Finds a directory containing every managed legacy payload item.
+/// 查找包含全部受管旧载荷条目的目录。
 fn find_payload_root(project_root: &Path) -> Result<PathBuf> {
-    // BOUNDARY_PAYLOAD_ROOT is the explicit override used by release builds.
+    // 环境变量 BOUNDARY_PAYLOAD_ROOT 是发布构建时使用的显式覆盖路径。
     if let Ok(raw) = env::var("BOUNDARY_PAYLOAD_ROOT") {
         let candidate = PathBuf::from(raw);
         if payload_root_has_all_items(&candidate) {
@@ -84,8 +81,7 @@ fn find_payload_root(project_root: &Path) -> Result<PathBuf> {
         );
     }
 
-    // Local development often runs from either the Rust crate or the original
-    // project root, so inspect the root and its direct children.
+    // 本地开发可能从 Rust crate 或原项目根目录运行，因此检查根目录及其直接子目录。
     let mut candidates = vec![project_root.to_path_buf()];
     for entry in std::fs::read_dir(project_root)
         .with_context(|| format!("read {}", project_root.display()))?
@@ -112,14 +108,14 @@ fn find_payload_root(project_root: &Path) -> Result<PathBuf> {
     bail!("unable to locate payload root containing all managed items. checked: {checked}")
 }
 
-/// Confirms that a payload candidate contains the complete install set.
+/// 确认候选载荷目录包含完整安装集。
 fn payload_root_has_all_items(candidate: &Path) -> bool {
     MANAGED_ITEMS
         .iter()
         .all(|item| candidate.join(item).exists())
 }
 
-/// Builds the embedded payload archive consumed by `src/core.rs`.
+/// 构建供 `src/core.rs` 使用的内嵌载荷压缩包。
 fn build_payload_zip(payload_root: Option<&Path>, out_dir: &Path) -> Result<()> {
     let payload_zip = out_dir.join("payload.zip");
     let file =
@@ -133,9 +129,8 @@ fn build_payload_zip(payload_root: Option<&Path>, out_dir: &Path) -> Result<()> 
         .unix_permissions(0o755);
 
     let Some(payload_root) = payload_root else {
-        // Source-only builds still need payload.zip because core.rs uses
-        // include_bytes!. An empty zip keeps the binary buildable and lets the
-        // runtime validator report the missing items when install is attempted.
+        // 纯源码构建仍需要 payload.zip，因为 core.rs 使用 include_bytes!。
+        // 空 zip 可以保证二进制可构建，真正安装时再由运行时校验报告缺失项。
         zip.finish()?;
         return Ok(());
     };
@@ -143,8 +138,7 @@ fn build_payload_zip(payload_root: Option<&Path>, out_dir: &Path) -> Result<()> 
     for item in MANAGED_ITEMS {
         let path = payload_root.join(item);
         if path.is_dir() {
-            // Preserve paths relative to the payload root so extraction can
-            // recreate the original toolbox layout under Binaries\Win64.
+            // 保留相对载荷根目录的路径，解压时才能在 Binaries\Win64 下还原原布局。
             for entry in WalkDir::new(&path) {
                 let entry = entry.with_context(|| format!("walk {}", path.display()))?;
                 let entry_path = entry.path();
@@ -179,7 +173,7 @@ fn build_payload_zip(payload_root: Option<&Path>, out_dir: &Path) -> Result<()> 
     Ok(())
 }
 
-/// Generates a square PNG/ICO from available game artwork, or a fallback icon.
+/// 从可用游戏素材生成方形 PNG/ICO；没有素材时生成兜底图标。
 fn build_icon(manifest_dir: &Path, project_root: &Path, out_dir: &Path) -> Result<()> {
     let source = icon_asset_candidates(manifest_dir, project_root)
         .into_iter()
@@ -188,7 +182,7 @@ fn build_icon(manifest_dir: &Path, project_root: &Path, out_dir: &Path) -> Resul
     let icon_ico = out_dir.join("app_icon.ico");
 
     if let Some(source) = source {
-        // Windows icons look better when source art is normalized to a square.
+        // 在 Windows 上，图标使用正方形素材效果更稳定。
         let image = image::open(&source).with_context(|| format!("open {}", source.display()))?;
         let square = image.resize_to_fill(256, 256, image::imageops::FilterType::Lanczos3);
         square
@@ -198,8 +192,7 @@ fn build_icon(manifest_dir: &Path, project_root: &Path, out_dir: &Path) -> Resul
             .save(&icon_ico)
             .with_context(|| format!("write {}", icon_ico.display()))?;
     } else {
-        // Public repos do not include private artwork; generate a neutral icon
-        // instead of making build success depend on binary assets.
+        // 公开仓库不包含私有美术资源，因此生成中性图标，避免构建依赖二进制素材。
         let icon = image::RgbaImage::from_pixel(256, 256, image::Rgba([11, 14, 19, 255]));
         icon.save(&icon_png)
             .with_context(|| format!("write {}", icon_png.display()))?;
@@ -209,7 +202,7 @@ fn build_icon(manifest_dir: &Path, project_root: &Path, out_dir: &Path) -> Resul
     Ok(())
 }
 
-/// Returns icon locations in preference order.
+/// 按优先级返回可用图标素材路径。
 fn icon_asset_candidates(manifest_dir: &Path, project_root: &Path) -> Vec<PathBuf> {
     ["library_600x900_schinese.jpg", "Boundary.jpg"]
         .into_iter()
@@ -223,7 +216,7 @@ fn icon_asset_candidates(manifest_dir: &Path, project_root: &Path) -> Vec<PathBu
         .collect()
 }
 
-/// Embeds the generated ICO as the Windows executable icon.
+/// 将生成的 ICO 嵌入为 Windows 可执行文件图标。
 fn embed_windows_icon(out_dir: &Path) -> Result<()> {
     let icon_ico = out_dir.join("app_icon.ico");
     let rc_path = out_dir.join("app_icon.rc");
