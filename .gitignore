@@ -1,0 +1,7 @@
+/target/
+/installer_tool/
+*.exe
+*.pdb
+*.log
+*.tmp
+*.zip

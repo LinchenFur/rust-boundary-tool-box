@@ -1,0 +1,1829 @@
+import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
+
+export struct PortRow {
+    label: string,
+    detail: string,
+    occupied: bool,
+}
+
+export struct DriveRow {
+    label: string,
+    checked: bool,
+}
+
+export struct ServerRow {
+    name: string,
+    address: string,
+    meta: string,
+    state: string,
+    players: string,
+    active: bool,
+}
+
+export struct VntPeerRow {
+    name: string,
+    address: string,
+    detail: string,
+    online: bool,
+}
+
+component Txt inherits Text {
+    font-family: "Microsoft YaHei UI";
+    letter-spacing: 0px;
+}
+
+component Panel inherits Rectangle {
+    in property <brush> fill: #151922;
+    in property <brush> stroke: #273041;
+    in property <length> radius: 18px;
+
+    background: fill;
+    border-color: stroke;
+    border-width: 1px;
+    border-radius: radius;
+    clip: true;
+
+    @children
+}
+
+component TitleBlock inherits Rectangle {
+    in property <string> title;
+    in property <string> sub: "";
+
+    height: sub == "" ? 32px : 52px;
+    background: #00000000;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 3px;
+
+        Txt {
+            text: title;
+            color: #eef4fb;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        if sub != "" : Txt {
+            text: sub;
+            color: #95a3b8;
+            font-size: 12px;
+            font-weight: 500;
+        }
+    }
+}
+
+component StatusTag inherits Rectangle {
+    in property <string> title;
+    in property <string> sub;
+    in property <brush> accent: #62e2c1;
+
+    height: 42px;
+    min-width: 144px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: #273041;
+    background: #0f131a;
+    opacity: 1.0;
+
+    animate opacity { duration: 420ms; }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 12px;
+        spacing: 9px;
+
+        Rectangle {
+            width: 5px;
+            background: #00000000;
+
+            Rectangle {
+                width: parent.width;
+                height: 24px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 3px;
+                background: accent;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 0px;
+            horizontal-stretch: 1;
+
+            Txt {
+                text: title;
+                color: #eef4fb;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            Txt {
+                text: sub;
+                color: #95a3b8;
+                font-size: 11px;
+                font-weight: 500;
+            }
+        }
+    }
+}
+
+component NavTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected: false;
+    callback clicked;
+
+    height: 42px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: selected ? #62e2c1 : (touch.has-hover ? #54617a : #273041);
+    background: selected ? #103b34 : (touch.has-hover ? #1d2531 : #0f131a);
+
+    animate background { duration: 120ms; }
+    animate border-color { duration: 120ms; }
+
+    Txt {
+        text: label;
+        color: selected ? #c7fff2 : #c7d1df;
+        font-size: 14px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        clicked => { parent.clicked(); }
+    }
+}
+
+component Action inherits Rectangle {
+    in property <string> label;
+    in property <string> sub: "";
+    in property <bool> enabled: true;
+    in property <bool> primary: false;
+    in property <brush> accent: #62e2c1;
+    callback clicked;
+
+    height: primary ? 88px : 54px;
+    border-radius: primary ? 22px : 14px;
+    border-width: primary ? 0px : 1px;
+    border-color: enabled ? (touch.has-hover ? accent : #344056) : #273041;
+    background: enabled
+        ? (primary
+            ? (touch.pressed ? #43bfa3 : (touch.has-hover ? #82f6da : accent))
+            : (touch.pressed ? #202a38 : (touch.has-hover ? #1d2531 : #0f131a)))
+        : #0f131a88;
+
+    animate background { duration: 140ms; }
+    animate border-color { duration: 140ms; }
+
+    HorizontalLayout {
+        padding-left: primary ? 22px : 14px;
+        padding-right: primary ? 22px : 14px;
+        spacing: 12px;
+
+        Rectangle {
+            width: primary ? 10px : 6px;
+            background: #00000000;
+
+            Rectangle {
+                width: parent.width;
+                height: primary ? 54px : 28px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 4px;
+                background: enabled ? (primary ? #08231d : accent) : #657285;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+
+            Txt {
+                text: label;
+                color: enabled ? (primary ? #08231d : #eef4fb) : #687589;
+                font-size: primary ? 23px : 14px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+            }
+
+            if sub != "" : Txt {
+                text: sub;
+                color: enabled ? (primary ? #08231d : #95a3b8) : #687589;
+                font-size: 12px;
+                font-weight: 500;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: parent.enabled;
+        clicked => { parent.clicked(); }
+    }
+}
+
+component InfoBox inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <brush> accent: #62e2c1;
+    in property <length> box-height: 88px;
+
+    height: box-height;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: #273041;
+    background: #0f131a;
+    clip: true;
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            width: 4px;
+            background: accent;
+        }
+
+        VerticalLayout {
+            alignment: start;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 11px;
+            padding-bottom: 11px;
+            spacing: 6px;
+
+            Txt {
+                text: label;
+                color: accent;
+                font-size: 11px;
+                font-weight: 700;
+            }
+
+            Txt {
+                text: value;
+                color: #eef4fb;
+                font-size: 14px;
+                font-weight: 500;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+component InputBox inherits Rectangle {
+    in property <bool> enabled: true;
+
+    height: 52px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: enabled ? #54617a : #273041;
+    background: enabled ? #0f131a : #0f131a88;
+
+    @children
+}
+
+component DetailRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <brush> accent: #62e2c1;
+
+    height: 76px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: #273041;
+    background: #0f131a;
+    clip: true;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 14px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 6px;
+            background: #00000000;
+
+            Rectangle {
+                width: parent.width;
+                height: 40px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 3px;
+                background: accent;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 5px;
+            horizontal-stretch: 1;
+
+            Txt {
+                text: label;
+                color: accent;
+                font-size: 11px;
+                font-weight: 800;
+                horizontal-stretch: 1;
+            }
+
+            Txt {
+                text: value;
+                color: #eef4fb;
+                font-size: 13px;
+                font-weight: 500;
+                wrap: word-wrap;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+}
+
+component PortLine inherits Rectangle {
+    in property <string> label;
+    in property <string> detail;
+    in property <bool> occupied: false;
+
+    height: 58px;
+    background: #00000000;
+
+    Rectangle {
+        width: parent.width;
+        height: 52px;
+        y: 3px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: occupied ? #ffb4ab : #344056;
+        background: occupied ? #241217 : #0f131a;
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 6px;
+                background: #00000000;
+
+                Rectangle {
+                    width: parent.width;
+                    height: 30px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: occupied ? #ffb4ab : #9ef0b5;
+                }
+            }
+
+            Txt {
+                text: label;
+                min-width: 88px;
+                color: #eef4fb;
+                font-size: 14px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
+            Txt {
+                text: detail;
+                color: occupied ? #ffd9d3 : #95a3b8;
+                font-size: 12px;
+                font-weight: 500;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+            }
+
+            Txt {
+                text: occupied ? "占用" : "空闲";
+                min-width: 52px;
+                color: occupied ? #ffb4ab : #9ef0b5;
+                font-size: 12px;
+                font-weight: 800;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+component ServerLine inherits Rectangle {
+    in property <string> name;
+    in property <string> address;
+    in property <string> meta;
+    in property <string> state;
+    in property <string> players;
+    in property <bool> active: false;
+
+    height: 66px;
+    background: #00000000;
+
+    Rectangle {
+        width: parent.width;
+        height: 60px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: active ? #9ef0b5 : #344056;
+        background: active ? #0d2d1a : #0f131a;
+
+        HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 6px;
+                background: #00000000;
+
+                Rectangle {
+                    width: parent.width;
+                    height: 32px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: active ? #9ef0b5 : #a8d8ff;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                horizontal-stretch: 1;
+
+                Txt {
+                    text: name;
+                    color: #eef4fb;
+                    font-size: 14px;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+
+                Txt {
+                    text: address + "  /  " + meta;
+                    color: #95a3b8;
+                    font-size: 12px;
+                    font-weight: 500;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                min-width: 104px;
+
+                Txt {
+                    text: players;
+                    color: active ? #ddffe6 : #dbeafe;
+                    font-size: 14px;
+                    font-weight: 800;
+                    horizontal-alignment: right;
+                }
+
+                Txt {
+                    text: state;
+                    color: active ? #9ef0b5 : #95a3b8;
+                    font-size: 11px;
+                    font-weight: 600;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+    }
+}
+
+component DriveLine inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked: false;
+    callback toggled();
+
+    height: 58px;
+    background: #00000000;
+
+    card := Rectangle {
+        y: 4px;
+        width: parent.width;
+        height: 50px;
+        border-radius: 15px;
+        border-width: 1px;
+        border-color: checked ? #9ef0b5 : (touch.has-hover ? #54617a : #344056);
+        background: checked ? #103821 : (touch.has-hover ? #161f2a : #0f131a);
+
+        animate background { duration: 120ms; }
+        animate border-color { duration: 120ms; }
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 22px;
+                background: #00000000;
+
+                Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 7px;
+                    border-width: 2px;
+                    border-color: checked ? #9ef0b5 : #54617a;
+                    background: checked ? #9ef0b5 : #00000000;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                horizontal-stretch: 1;
+
+                Txt {
+                    text: label;
+                    color: #eef4fb;
+                    font-size: 15px;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                }
+
+                Txt {
+                    text: checked ? "已选择" : "未选择";
+                    color: checked ? #9ef0b5 : #95a3b8;
+                    font-size: 11px;
+                    font-weight: 500;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        clicked => { parent.toggled(); }
+    }
+}
+
+component TopSwitch inherits Rectangle {
+    in property <bool> checked: false;
+    callback toggled(value: bool);
+
+    height: 54px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: checked ? #9ef0b5 : #344056;
+    background: checked ? #0d2d1a : #0f131a;
+
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 14px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: checked ? #9ef0b5 : #8a96a8;
+        }
+
+        Txt {
+            text: checked ? "窗口保持置顶" : "窗口不置顶";
+            color: #eef4fb;
+            font-size: 14px;
+            font-weight: 700;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+        }
+    }
+
+    TouchArea {
+        clicked => { parent.toggled(!parent.checked); }
+    }
+}
+
+component OptionSwitch inherits Rectangle {
+    in property <bool> checked: false;
+    in property <string> on-label;
+    in property <string> off-label;
+    in property <string> sub;
+    callback toggled(value: bool);
+
+    height: 54px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: checked ? #9ef0b5 : #344056;
+    background: checked ? #0d2d1a : #0f131a;
+
+    animate background { duration: 140ms; }
+    animate border-color { duration: 140ms; }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 14px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 38px;
+            background: #00000000;
+
+            Rectangle {
+                width: 38px;
+                height: 22px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 11px;
+                background: checked ? #9ef0b5 : #344056;
+
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    x: checked ? 19px : 3px;
+                    y: 3px;
+                    border-radius: 8px;
+                    background: checked ? #0b2a18 : #c7d1df;
+
+                    animate x { duration: 120ms; }
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+
+            Txt {
+                text: checked ? on-label : off-label;
+                color: #eef4fb;
+                font-size: 14px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+            }
+
+            Txt {
+                text: sub;
+                color: #95a3b8;
+                font-size: 11px;
+                font-weight: 500;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+
+    TouchArea {
+        clicked => { parent.toggled(!parent.checked); }
+    }
+}
+
+component VntPeerLine inherits Rectangle {
+    in property <string> name;
+    in property <string> address;
+    in property <string> detail;
+    in property <bool> online: false;
+
+    height: 64px;
+    background: #00000000;
+
+    Rectangle {
+        width: parent.width;
+        height: 58px;
+        y: 3px;
+        border-radius: 15px;
+        border-width: 1px;
+        border-color: online ? #9ef0b5 : #344056;
+        background: online ? #0c2b1b : #0f131a;
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 34px;
+                height: 34px;
+                border-radius: 17px;
+                background: online ? #9ef0b5 : #344056;
+
+                Txt {
+                    text: online ? "ON" : "--";
+                    color: online ? #08231d : #c7d1df;
+                    font-size: 10px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                horizontal-stretch: 1;
+
+                Txt {
+                    text: name + "  /  " + address;
+                    color: #eef4fb;
+                    font-size: 14px;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+
+                Txt {
+                    text: detail;
+                    color: #95a3b8;
+                    font-size: 12px;
+                    font-weight: 500;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "边境社区服工具箱";
+    width: 1260px;
+    height: 780px;
+    background: #0b0e13;
+
+    property <int> page: 0;
+
+    in-out property <string> payload_label: "";
+    in-out property <string> detected_text: "正在检测 Steam 安装目录...";
+    in-out property <string> manual_path: "";
+    in-out property <string> target_text: "未解析到有效的安装目录";
+    in-out property <bool> auto_mode: true;
+    in-out property <bool> keep_topmost: true;
+    in-out property <string> hotkey_text: "Ctrl+Alt+F10";
+    in-out property <string> status_text: "准备就绪";
+    in-out property <string> process_status_text: "运行进程：未检测";
+    in-out property <bool> show_logs: false;
+    in-out property <string> log_text: "";
+    in-out property <bool> busy: false;
+    in-out property <bool> pulse: false;
+    in-out property <bool> hotkey_listening: false;
+    in-out property <bool> show_drive_dialog: false;
+    in-out property <bool> show_app_dialog: false;
+    in-out property <bool> app_dialog_confirm: false;
+    in-out property <bool> app_dialog_input: false;
+    in-out property <bool> app_dialog_error: false;
+    in-out property <string> app_dialog_title: "";
+    in-out property <string> app_dialog_text: "";
+    in-out property <string> app_dialog_input_text: "";
+    in-out property <string> app_dialog_primary_text: "确定";
+    in-out property <string> app_dialog_secondary_text: "取消";
+    in-out property <bool> has_target: false;
+    in-out property <bool> servers_loading: false;
+    in-out property <string> server_status_text: "服务器列表：未刷新";
+    in-out property <string> vnt_server_text: "101.35.230.139:6660";
+    in-out property <string> vnt_network_code: "";
+    in-out property <string> vnt_password: "";
+    in-out property <bool> vnt_no_tun: false;
+    in-out property <bool> vnt_compress: false;
+    in-out property <bool> vnt_rtx: false;
+    in-out property <bool> vnt_busy: false;
+    in-out property <bool> vnt_running: false;
+    in-out property <string> vnt_status_text: "未连接";
+    in-out property <string> vnt_detail_text: "填写网络编号后启动联机平台";
+    in-out property <string> vnt_ip_text: "-";
+    in-out property <string> vnt_server_status_text: "-";
+    in-out property <string> vnt_nat_text: "-";
+    in-out property <string> vnt_peer_summary_text: "0 个节点";
+    in-out property <[PortRow]> port_rows;
+    in-out property <[DriveRow]> drive_rows;
+    in-out property <[ServerRow]> server_rows;
+    in-out property <[VntPeerRow]> vnt_peer_rows;
+
+    callback browse_clicked();
+    callback redetect_clicked();
+    callback scan_clicked();
+    callback auto_mode_clicked();
+    callback manual_mode_clicked();
+    callback manual_path_changed(text: string);
+    callback keep_topmost_toggled(value: bool);
+    callback hotkey_text_changed(text: string);
+    callback hotkey_captured(text: string, control: bool, alt: bool, shift: bool, meta: bool);
+    callback install_clicked();
+    callback uninstall_clicked();
+    callback launch_clicked();
+    callback detect_processes_clicked();
+    callback stop_processes_clicked();
+    callback open_logs_clicked();
+    callback refresh_servers_clicked();
+    callback vnt_start_clicked();
+    callback vnt_stop_clicked();
+    callback vnt_refresh_clicked();
+    callback toggle_logs_clicked();
+    callback drive_toggled(index: int, checked: bool);
+    callback drive_confirmed();
+    callback drive_cancelled();
+    callback app_dialog_primary();
+    callback app_dialog_secondary();
+
+    VerticalLayout {
+        padding: 18px;
+        spacing: 14px;
+
+        HorizontalLayout {
+            height: 64px;
+            spacing: 14px;
+
+            Panel {
+                width: 250px;
+                radius: 18px;
+
+                VerticalLayout {
+                    padding-left: 18px;
+                    padding-right: 18px;
+                    spacing: 0px;
+
+                    Txt {
+                        text: "BOUNDARY";
+                        color: #eef4fb;
+                        font-family: "Segoe UI";
+                        font-size: 25px;
+                        font-weight: 800;
+                    }
+
+                    Txt {
+                        text: "社区服工具箱";
+                        color: #95a3b8;
+                        font-size: 13px;
+                        font-weight: 700;
+                    }
+                }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "启动";
+                selected: page == 0;
+                clicked => { root.page = 0; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "目录";
+                selected: page == 1;
+                clicked => { root.page = 1; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "诊断";
+                selected: page == 2;
+                clicked => { root.page = 2; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "联机";
+                selected: page == 5;
+                clicked => { root.page = 5; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "服务器";
+                selected: page == 4;
+                clicked => { root.page = 4; }
+            }
+
+            NavTab {
+                width: 112px;
+                label: "设置";
+                selected: page == 3;
+                clicked => { root.page = 3; }
+            }
+
+            Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+            StatusTag {
+                title: has_target ? "READY" : "WAIT";
+                sub: has_target ? "目标目录已锁定" : "等待目标目录";
+                accent: has_target ? #9ef0b5 : #f6c76d;
+                opacity: has_target ? 1.0 : (pulse ? 0.72 : 1.0);
+            }
+        }
+
+        content := Rectangle {
+            vertical-stretch: 1;
+            background: #00000000;
+
+        if page == 0 : HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 470px;
+                vertical-stretch: 1;
+                radius: 26px;
+                fill: #172032;
+                stroke: #344056;
+
+                VerticalLayout {
+                    padding: 28px;
+                    spacing: 20px;
+
+                    TitleBlock {
+                        title: "启动";
+                        sub: has_target ? "目录已准备，可以直接启动游戏" : "先完成目录识别后再启动";
+                    }
+
+                    Action {
+                        label: "启动游戏";
+                        sub: has_target ? "使用当前目标目录启动 Boundary" : "等待有效游戏根目录";
+                        primary: true;
+                        enabled: has_target && !busy;
+                        accent: #62e2c1;
+                        clicked => { root.launch_clicked(); }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: "安装";
+                            sub: "写入社区服文件";
+                            enabled: has_target && !busy;
+                            accent: #9ef0b5;
+                            clicked => { root.install_clicked(); }
+                        }
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: "卸载";
+                            sub: "移除已安装文件";
+                            enabled: has_target && !busy;
+                            accent: #ffb4ab;
+                            clicked => { root.uninstall_clicked(); }
+                        }
+                    }
+
+                    InfoBox {
+                        box-height: 96px;
+                        label: "TASK";
+                        value: status_text;
+                        accent: busy ? #ffb4ab : #9ef0b5;
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 28px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "当前目标";
+                        sub: auto_mode ? "自动识别" : "手动选择";
+                    }
+
+                    InfoBox {
+                        box-height: 132px;
+                        label: "TARGET";
+                        value: target_text;
+                        accent: has_target ? #9ef0b5 : #f6c76d;
+                    }
+
+                    InfoBox {
+                        box-height: 132px;
+                        label: "DETECTED";
+                        value: detected_text;
+                        accent: #a8d8ff;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: "去目录页";
+                            sub: "修改或重新识别目录";
+                            accent: #a8d8ff;
+                            clicked => { root.page = 1; }
+                        }
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: "全盘扫描";
+                            sub: "查找游戏目录";
+                            enabled: !busy;
+                            accent: #9ef0b5;
+                            clicked => { root.scan_clicked(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        if page == 1 : HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 360px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "识别方式";
+                        sub: "选择自动识别或手动指定目录";
+                    }
+
+                    NavTab {
+                        label: "自动识别";
+                        selected: auto_mode;
+                        clicked => { root.auto_mode_clicked(); }
+                    }
+
+                    NavTab {
+                        label: "手动选择";
+                        selected: !auto_mode;
+                        clicked => { root.manual_mode_clicked(); }
+                    }
+
+                    Action {
+                        label: "全盘扫描";
+                        sub: "选择盘符后扫描";
+                        enabled: !busy;
+                        accent: #9ef0b5;
+                        clicked => { root.scan_clicked(); }
+                    }
+
+                    Action {
+                        label: "重新检测";
+                        sub: "刷新自动识别结果";
+                        enabled: auto_mode && !busy;
+                        accent: #a8d8ff;
+                        clicked => { root.redetect_clicked(); }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "游戏根目录";
+                        sub: "手动模式下可直接输入或浏览目录";
+                    }
+
+                    InputBox {
+                        enabled: !auto_mode && !busy;
+
+                        LineEdit {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            text: manual_path;
+                            enabled: !auto_mode && !busy;
+                            placeholder-text: "游戏根目录";
+                            font-family: "Microsoft YaHei UI";
+                            font-size: 14px;
+                            edited(text) => { root.manual_path_changed(text); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 54px;
+                        spacing: 12px;
+
+                        Action {
+                            width: 150px;
+                            label: "浏览";
+                            sub: "OPEN";
+                            enabled: !auto_mode && !busy;
+                            accent: #62e2c1;
+                            clicked => { root.browse_clicked(); }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; background: #00000000; }
+                    }
+
+                    InfoBox {
+                        box-height: 128px;
+                        label: "DETECTED";
+                        value: detected_text;
+                        accent: #a8d8ff;
+                    }
+
+                    InfoBox {
+                        box-height: 120px;
+                        label: "TARGET";
+                        value: target_text;
+                        accent: has_target ? #9ef0b5 : #f6c76d;
+                    }
+                }
+            }
+        }
+
+        if page == 2 : HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 360px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "进程";
+                        sub: "检测或关闭可能占用端口的进程";
+                    }
+
+                    InfoBox {
+                        box-height: 120px;
+                        label: "PROCESS";
+                        value: process_status_text;
+                        accent: #d7c4ff;
+                    }
+
+                    Action {
+                        label: "进程检测";
+                        sub: "扫描运行进程";
+                        enabled: has_target && !busy;
+                        accent: #d7c4ff;
+                        clicked => { root.detect_processes_clicked(); }
+                    }
+
+                    Action {
+                        label: "关闭进程";
+                        sub: "结束占用进程";
+                        enabled: has_target && !busy;
+                        accent: #f6c76d;
+                        clicked => { root.stop_processes_clicked(); }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        height: 54px;
+                        spacing: 12px;
+
+                        TitleBlock {
+                            horizontal-stretch: 1;
+                            title: show_logs ? "日志" : "端口";
+                            sub: show_logs ? "运行日志输出" : "社区服端口占用状态";
+                        }
+
+                        Action {
+                            width: 140px;
+                            label: show_logs ? "看端口" : "看日志";
+                            sub: "";
+                            enabled: !busy;
+                            accent: #d7c4ff;
+                            clicked => { root.toggle_logs_clicked(); }
+                        }
+                    }
+
+                    if !show_logs : ListView {
+                        vertical-stretch: 1;
+
+                        for port_row[index] in port_rows: PortLine {
+                            label: port_row.label;
+                            detail: port_row.detail;
+                            occupied: port_row.occupied;
+                        }
+                    }
+
+                    if show_logs : ScrollView {
+                        vertical-stretch: 1;
+
+                        Txt {
+                            x: 14px;
+                            y: 14px;
+                            width: parent.width - 28px;
+                            text: log_text;
+                            color: #dbeafe;
+                            font-family: "Consolas";
+                            font-size: 13px;
+                            font-weight: 500;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+
+        if page == 5 : HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 420px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 14px;
+
+                    TitleBlock {
+                        title: "联机";
+                        sub: vnt_running ? "虚拟局域网已运行" : "创建或加入同一个网络编号";
+                    }
+
+                    InfoBox {
+                        box-height: 78px;
+                        label: "STATUS";
+                        value: vnt_status_text + "\n" + vnt_detail_text;
+                        accent: vnt_running ? #9ef0b5 : (vnt_busy ? #f6c76d : #a8d8ff);
+                    }
+
+                    Txt {
+                        text: "服务器";
+                        color: #95a3b8;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    InputBox {
+                        enabled: !vnt_running && !vnt_busy;
+
+                        LineEdit {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            text: vnt_server_text;
+                            enabled: !vnt_running && !vnt_busy;
+                            placeholder-text: "101.35.230.139:6660";
+                            font-family: "Microsoft YaHei UI";
+                            font-size: 14px;
+                            edited(text) => { root.vnt_server_text = text; }
+                        }
+                    }
+
+                    Txt {
+                        text: "网络编号";
+                        color: #95a3b8;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    InputBox {
+                        enabled: !vnt_running && !vnt_busy;
+
+                        LineEdit {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            text: vnt_network_code;
+                            enabled: !vnt_running && !vnt_busy;
+                            placeholder-text: "相同编号会进入同一虚拟局域网";
+                            font-family: "Microsoft YaHei UI";
+                            font-size: 14px;
+                            edited(text) => { root.vnt_network_code = text; }
+                        }
+                    }
+
+                    Txt {
+                        text: "加密密码";
+                        color: #95a3b8;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    InputBox {
+                        enabled: !vnt_running && !vnt_busy;
+
+                        LineEdit {
+                            x: 14px;
+                            y: 8px;
+                            width: parent.width - 28px;
+                            height: parent.height - 16px;
+                            text: vnt_password;
+                            enabled: !vnt_running && !vnt_busy;
+                            placeholder-text: "可选";
+                            font-family: "Microsoft YaHei UI";
+                            font-size: 14px;
+                            edited(text) => { root.vnt_password = text; }
+                        }
+                    }
+
+                    OptionSwitch {
+                        checked: vnt_no_tun;
+                        on-label: "无虚拟网卡模式";
+                        off-label: "标准虚拟网卡模式";
+                        sub: vnt_no_tun ? "无需管理员权限，仅适合端口映射" : "适合游戏局域网联机";
+                        toggled(value) => { root.vnt_no_tun = value; }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+
+                        OptionSwitch {
+                            horizontal-stretch: 1;
+                            checked: vnt_compress;
+                            on-label: "压缩已开";
+                            off-label: "压缩关闭";
+                            sub: "弱网可尝试开启";
+                            toggled(value) => { root.vnt_compress = value; }
+                        }
+
+                        OptionSwitch {
+                            horizontal-stretch: 1;
+                            checked: vnt_rtx;
+                            on-label: "QUIC 优化";
+                            off-label: "常规通道";
+                            sub: "高丢包时可尝试";
+                            toggled(value) => { root.vnt_rtx = value; }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 58px;
+                        spacing: 12px;
+
+                        Action {
+                            horizontal-stretch: 1;
+                            label: vnt_running ? "运行中" : (vnt_busy ? "启动中" : "启动联机");
+                            sub: vnt_running ? "网络已建立" : "START";
+                            enabled: !vnt_running && !vnt_busy;
+                            primary: false;
+                            accent: #62e2c1;
+                            clicked => { root.vnt_start_clicked(); }
+                        }
+
+                        Action {
+                            width: 132px;
+                            label: vnt_busy ? "处理中" : "停止";
+                            sub: "";
+                            enabled: vnt_running && !vnt_busy;
+                            accent: #ffb4ab;
+                            clicked => { root.vnt_stop_clicked(); }
+                        }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 14px;
+
+                    HorizontalLayout {
+                        height: 54px;
+                        spacing: 12px;
+
+                        TitleBlock {
+                            horizontal-stretch: 1;
+                            title: "联机状态";
+                            sub: vnt_peer_summary_text;
+                        }
+
+                        Action {
+                            width: 132px;
+                            label: "刷新";
+                            sub: "";
+                            enabled: vnt_running && !vnt_busy;
+                            accent: #a8d8ff;
+                            clicked => { root.vnt_refresh_clicked(); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 108px;
+                        spacing: 12px;
+
+                        InfoBox {
+                            horizontal-stretch: 1;
+                            box-height: 108px;
+                            label: "VIRTUAL IP";
+                            value: vnt_ip_text;
+                            accent: vnt_running ? #9ef0b5 : #54617a;
+                        }
+
+                        InfoBox {
+                            horizontal-stretch: 1;
+                            box-height: 108px;
+                            label: "SERVER";
+                            value: vnt_server_status_text;
+                            accent: vnt_running ? #a8d8ff : #54617a;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 108px;
+                        spacing: 12px;
+
+                        InfoBox {
+                            horizontal-stretch: 1;
+                            box-height: 108px;
+                            label: "NETWORK";
+                            value: vnt_network_code == "" ? "-" : vnt_network_code;
+                            accent: #d7c4ff;
+                        }
+
+                        InfoBox {
+                            horizontal-stretch: 1;
+                            box-height: 108px;
+                            label: "NAT";
+                            value: vnt_nat_text;
+                            accent: #f6c76d;
+                        }
+                    }
+
+                    Panel {
+                        vertical-stretch: 1;
+                        fill: #0f131a;
+                        radius: 18px;
+
+                        ListView {
+                            x: 12px;
+                            y: 12px;
+                            width: parent.width - 24px;
+                            height: parent.height - 24px;
+
+                            for peer in vnt_peer_rows: VntPeerLine {
+                                name: peer.name;
+                                address: peer.address;
+                                detail: peer.detail;
+                                online: peer.online;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if page == 3 : HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 420px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "窗口置顶";
+                        sub: "启动后窗口置顶与快捷键";
+                    }
+
+                    hotkey-focus := FocusScope {
+                        width: 0px;
+                        height: 0px;
+                        enabled: hotkey_listening;
+                        focus-on-click: false;
+                        focus-on-tab-navigation: false;
+
+                        key-pressed(event) => {
+                            if hotkey_listening && !event.repeat {
+                                root.hotkey_captured(
+                                    event.text,
+                                    event.modifiers.control,
+                                    event.modifiers.alt,
+                                    event.modifiers.shift,
+                                    event.modifiers.meta
+                                );
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
+
+                    TopSwitch {
+                        checked: keep_topmost;
+                        toggled(value) => { root.keep_topmost_toggled(value); }
+                    }
+
+                    Action {
+                        label: hotkey_listening ? "正在监听快捷键" : "点击监听快捷键";
+                        sub: hotkey_listening ? "按下组合键，Esc 退出设置" : "当前：" + hotkey_text;
+                        enabled: !busy;
+                        accent: hotkey_listening ? #f6c76d : #a8d8ff;
+                        clicked => {
+                            root.hotkey_listening = true;
+                            hotkey-focus.focus();
+                        }
+                    }
+
+                    Action {
+                        label: "打开日志目录";
+                        sub: "查看工具运行记录";
+                        enabled: !busy;
+                        accent: #a8d8ff;
+                        clicked => { root.open_logs_clicked(); }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "详细状态";
+                        sub: "当前目标、进程、服务与置顶状态";
+                    }
+
+                    DetailRow {
+                        label: "操作状态";
+                        value: status_text;
+                        accent: busy ? #ffb4ab : #9ef0b5;
+                    }
+
+                    DetailRow {
+                        label: "目标目录";
+                        value: has_target ? target_text : "未锁定游戏根目录";
+                        accent: has_target ? #9ef0b5 : #f6c76d;
+                    }
+
+                    DetailRow {
+                        label: "进程状态";
+                        value: process_status_text;
+                        accent: #d7c4ff;
+                    }
+
+                    DetailRow {
+                        label: "服务器列表";
+                        value: server_status_text;
+                        accent: #a8d8ff;
+                    }
+
+                    DetailRow {
+                        label: "置顶设置";
+                        value: (keep_topmost ? "启动后默认保持置顶" : "启动后默认不置顶") + " / 快捷键 " + hotkey_text;
+                        accent: keep_topmost ? #9ef0b5 : #95a3b8;
+                    }
+                }
+            }
+        }
+
+        if page == 4 : HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 16px;
+
+            Panel {
+                width: 360px;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    TitleBlock {
+                        title: "服务器";
+                    }
+
+                    InfoBox {
+                        box-height: 108px;
+                        label: "STATUS";
+                        value: server_status_text;
+                        accent: servers_loading ? #f6c76d : #9ef0b5;
+                    }
+
+                    Action {
+                        label: servers_loading ? "刷新中" : "刷新服务器";
+                        sub: "读取最新 JSON";
+                        enabled: !servers_loading;
+                        accent: #d7c4ff;
+                        clicked => { root.refresh_servers_clicked(); }
+                    }
+                }
+            }
+
+            Panel {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                radius: 26px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 14px;
+
+                    TitleBlock {
+                        title: "服务器列表";
+                        sub: server_status_text;
+                    }
+
+                    ListView {
+                        vertical-stretch: 1;
+
+                        for server in server_rows: ServerLine {
+                            name: server.name;
+                            address: server.address;
+                            meta: server.meta;
+                            state: server.state;
+                            players: server.players;
+                            active: server.active;
+                        }
+                    }
+                }
+            }
+        }
+        }
+    }
+
+    if show_drive_dialog : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #05070bcc;
+
+        Panel {
+            width: 560px;
+            height: 520px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            radius: 24px;
+
+            VerticalLayout {
+                padding: 22px;
+                spacing: 14px;
+
+                TitleBlock {
+                    title: "选择扫描盘符";
+                    sub: "只扫描勾选的磁盘";
+                }
+
+                Panel {
+                    vertical-stretch: 1;
+                    fill: #0f131a;
+                    radius: 18px;
+
+                    ListView {
+                        x: 12px;
+                        y: 10px;
+                        width: parent.width - 24px;
+                        height: parent.height - 20px;
+
+                        for drive[index] in drive_rows: DriveLine {
+                            label: drive.label;
+                            checked: drive.checked;
+                            toggled => { root.drive_toggled(index, !drive.checked); }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    height: 58px;
+                    spacing: 12px;
+
+                    Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+                    Action {
+                        width: 132px;
+                        label: "取消";
+                        sub: "";
+                        enabled: !busy;
+                        accent: #ffb4ab;
+                        clicked => { root.drive_cancelled(); }
+                    }
+
+                    Action {
+                        width: 156px;
+                        label: "开始扫描";
+                        sub: "";
+                        enabled: !busy;
+                        accent: #62e2c1;
+                        clicked => { root.drive_confirmed(); }
+                    }
+                }
+            }
+        }
+    }
+
+    if show_app_dialog : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #05070bd9;
+
+        Panel {
+            width: 560px;
+            height: app_dialog_input ? 360px : (app_dialog_confirm ? 318px : 292px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            radius: 24px;
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+
+                HorizontalLayout {
+                    height: 52px;
+                    spacing: 12px;
+
+                    Rectangle {
+                        width: 8px;
+                        background: #00000000;
+
+                        Rectangle {
+                            width: 8px;
+                            height: 40px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 4px;
+                            background: app_dialog_error ? #ffb4ab : (app_dialog_confirm ? #f6c76d : #9ef0b5);
+                        }
+                    }
+
+                    TitleBlock {
+                        horizontal-stretch: 1;
+                        title: app_dialog_title;
+                        sub: app_dialog_confirm ? "需要确认" : "";
+                    }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+
+                    Txt {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        text: app_dialog_text;
+                        color: #dbeafe;
+                        font-size: 14px;
+                        font-weight: 500;
+                        wrap: word-wrap;
+                    }
+                }
+
+                if app_dialog_input : InputBox {
+                    enabled: true;
+
+                    LineEdit {
+                        x: 14px;
+                        y: 8px;
+                        width: parent.width - 28px;
+                        height: parent.height - 16px;
+                        text: app_dialog_input_text;
+                        placeholder-text: "游戏根目录";
+                        font-family: "Microsoft YaHei UI";
+                        font-size: 14px;
+                        edited(text) => { root.app_dialog_input_text = text; }
+                    }
+                }
+
+                HorizontalLayout {
+                    height: 58px;
+                    spacing: 12px;
+
+                    Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+                    if app_dialog_confirm || app_dialog_input : Action {
+                        width: 132px;
+                        label: app_dialog_secondary_text;
+                        sub: "";
+                        accent: #ffb4ab;
+                        clicked => { root.app_dialog_secondary(); }
+                    }
+
+                    Action {
+                        width: 156px;
+                        label: app_dialog_primary_text;
+                        sub: "";
+                        accent: app_dialog_error ? #ffb4ab : #62e2c1;
+                        clicked => { root.app_dialog_primary(); }
+                    }
+                }
+            }
+        }
+    }
+}

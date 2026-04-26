@@ -1,0 +1,43 @@
+[package]
+name = "boundary_toolbox"
+version = "1.2.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+anyhow = "1.0.100"
+chrono = { version = "0.4.42", features = ["serde"] }
+crossbeam-channel = "0.5.15"
+image = { version = "0.25.8", default-features = true, features = ["jpeg", "png", "ico"] }
+netstat2 = "0.11.2"
+regex = "1.12.2"
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"
+slint = "1.16.0"
+sysinfo = "0.38.4"
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "sync", "time"] }
+uuid = { version = "1.18.1", features = ["v4"] }
+vnt-ipc = { path = "vendor/vnt/vnt-ipc" }
+walkdir = "2.5.0"
+winreg = "0.56.0"
+zip = { version = "8.5.1", default-features = true, features = ["deflate"] }
+
+[dependencies.windows]
+version = "0.62.2"
+features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_System_Threading",
+  "Win32_Storage_FileSystem",
+]
+
+[build-dependencies]
+anyhow = "1.0.100"
+embed-resource = "3.0.6"
+image = { version = "0.25.8", default-features = true, features = ["jpeg", "png", "ico"] }
+slint-build = "1.16.0"
+walkdir = "2.5.0"
+zip = { version = "8.5.1", default-features = true, features = ["deflate"] }
