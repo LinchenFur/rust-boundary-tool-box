@@ -93,6 +93,7 @@ export component AppWindow inherits Window {
     callback launch_clicked();
     callback detect_processes_clicked();
     callback stop_processes_clicked();
+    callback stop_port_process_clicked(protocol: string, port: int, pid: int);
     callback open_logs_clicked();
 
     // 远程服务器和 VNT 回调。
@@ -168,6 +169,9 @@ export component AppWindow inherits Window {
             port_rows: root.port_rows;
             detect_processes_clicked => { root.detect_processes_clicked(); }
             stop_processes_clicked => { root.stop_processes_clicked(); }
+            stop_port_process_clicked(protocol, port, pid) => {
+                root.stop_port_process_clicked(protocol, port, pid);
+            }
             toggle_logs_clicked => { root.toggle_logs_clicked(); }
         }
 

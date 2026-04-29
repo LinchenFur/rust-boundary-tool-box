@@ -55,6 +55,9 @@ impl AppController {
                 .map(|(protocol, port)| PortRow {
                     label: SharedString::from(format!("{}/{}", protocol, port)),
                     detail: SharedString::from("检测中..."),
+                    protocol: SharedString::from(*protocol),
+                    port: i32::from(*port),
+                    pid: 0,
                     occupied: false,
                 })
                 .collect::<Vec<_>>(),
@@ -226,6 +229,17 @@ impl AppController {
             ui.unwrap().on_stop_processes_clicked(move || {
                 controller.borrow_mut().start_stop_processes();
             });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap()
+                .on_stop_port_process_clicked(move |protocol, port, pid| {
+                    controller.borrow_mut().start_stop_port_process(
+                        protocol.to_string(),
+                        port,
+                        pid,
+                    );
+                });
         }
         {
             let controller = Rc::clone(controller);

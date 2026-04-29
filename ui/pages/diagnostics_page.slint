@@ -12,6 +12,7 @@ export component DiagnosticsPage inherits Rectangle {
     in property <[PortRow]> port_rows;
     callback detect_processes_clicked();
     callback stop_processes_clicked();
+    callback stop_port_process_clicked(protocol: string, port: int, pid: int);
     callback toggle_logs_clicked();
         // 页面 2：进程/端口诊断和会话日志。
         HorizontalLayout {
@@ -48,12 +49,11 @@ export component DiagnosticsPage inherits Rectangle {
                         clicked => { root.detect_processes_clicked(); }
                     }
 
-                    Action {
-                        label: "关闭进程";
-                        sub: "结束占用进程";
-                        enabled: has_target && !busy;
+                    InfoBox {
+                        box-height: 98px;
+                        label: "PORT";
+                        value: "占用端口可在右侧逐项关闭";
                         accent: #f6c76d;
-                        clicked => { root.stop_processes_clicked(); }
                     }
                 }
             }
@@ -93,7 +93,12 @@ export component DiagnosticsPage inherits Rectangle {
                         for port_row[index] in port_rows: PortLine {
                             label: port_row.label;
                             detail: port_row.detail;
+                            pid: port_row.pid;
+                            busy: root.busy;
                             occupied: port_row.occupied;
+                            close_clicked => {
+                                root.stop_port_process_clicked(port_row.protocol, port_row.port, port_row.pid);
+                            }
                         }
                     }
 

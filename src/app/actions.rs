@@ -221,6 +221,85 @@ impl AppController {
         });
     }
 
+    /// 在工作线程中只关闭某一个端口行对应的占用进程。
+    pub(super) fn start_stop_port_process(&mut self, protocol: String, port: i32, pid: i32) {
+        let protocol = protocol.trim().to_uppercase();
+        if protocol.is_empty() || port <= 0 || port > u16::MAX as i32 || pid <= 0 {
+            self.show_error_dialog("关闭端口进程", "端口行没有可关闭的有效进程。");
+            return;
+        }
+
+        self.ui.set_busy(true);
+        self.ui
+            .set_status_text(format!("关闭 {}/{} PID {} 中...", protocol, port, pid).into());
+        let core = self.core.clone();
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let result = (|| -> Result<(String, String, Vec<CorePortStatusRow>)> {
+                let current = core.collect_port_conflicts()?;
+                let conflict = current
+                    .into_iter()
+                    .find(|conflict| {
+                        conflict.protocol.eq_ignore_ascii_case(&protocol)
+                            && i32::from(conflict.port) == port
+                            && i32::try_from(conflict.pid).ok() == Some(pid)
+                    })
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "{}/{} PID {} 的端口占用已经不存在，请等待列表刷新。",
+                            protocol,
+                            port,
+                            pid
+                        )
+                    })?;
+
+                let summary_before = format_port_conflicts(std::slice::from_ref(&conflict));
+                core.stop_port_conflict_processes(std::slice::from_ref(&conflict))?;
+                thread::sleep(Duration::from_millis(800));
+
+                let remaining = core.collect_port_conflicts()?;
+                let still_exists = remaining.iter().any(|item| {
+                    item.protocol.eq_ignore_ascii_case(&protocol)
+                        && i32::from(item.port) == port
+                        && i32::try_from(item.pid).ok() == Some(pid)
+                });
+                let rows = core.port_status_rows()?;
+                let status = if still_exists {
+                    format!("{}/{} PID {} 仍在占用", protocol, port, pid)
+                } else {
+                    format!("{}/{} PID {} 已请求关闭", protocol, port, pid)
+                };
+                let dialog = if still_exists {
+                    format!("已请求关闭该端口进程，但仍检测到占用：\n{}", summary_before)
+                } else {
+                    format!("已关闭该端口对应进程：\n{}", summary_before)
+                };
+                Ok((dialog, status, rows))
+            })();
+
+            match result {
+                Ok((dialog, process_status, rows)) => {
+                    let _ = tx.send(AppMessage::PortRows(rows));
+                    let _ = tx.send(AppMessage::ActionFinished {
+                        title: "关闭端口进程".to_string(),
+                        status: "完成".to_string(),
+                        dialog,
+                        process_status: Some(process_status),
+                        target: None,
+                        load_topmost: false,
+                    });
+                }
+                Err(error) => {
+                    let _ = tx.send(AppMessage::ActionFailed {
+                        title: "关闭端口进程".to_string(),
+                        status: "执行失败".to_string(),
+                        error: error.to_string(),
+                    });
+                }
+            }
+        });
+    }
+
     /// 在工作线程中关闭运行时进程和端口冲突进程。
     pub(super) fn start_stop_processes(&mut self) {
         let target = match self.require_target() {

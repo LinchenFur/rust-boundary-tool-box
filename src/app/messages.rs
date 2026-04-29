@@ -139,14 +139,28 @@ impl AppController {
     pub(super) fn update_port_rows(&mut self, rows: Vec<CorePortStatusRow>) {
         let mapped = rows
             .into_iter()
-            .map(|row| PortRow {
-                occupied: row.conflict.is_some(),
-                label: format!("{}/{}", row.protocol, row.port).into(),
-                detail: row
+            .map(|row| {
+                let protocol = row.protocol.to_string();
+                let port = i32::from(row.port);
+                let (occupied, pid, detail) = row
                     .conflict
-                    .map(|conflict| format!("占用中：PID {} {}", conflict.pid, conflict.name))
-                    .unwrap_or_else(|| "空闲".to_string())
-                    .into(),
+                    .as_ref()
+                    .map(|conflict| {
+                        (
+                            true,
+                            i32::try_from(conflict.pid).unwrap_or(0),
+                            format!("占用中：PID {} {}", conflict.pid, conflict.name),
+                        )
+                    })
+                    .unwrap_or_else(|| (false, 0, "空闲".to_string()));
+                PortRow {
+                    occupied,
+                    label: format!("{}/{}", row.protocol, row.port).into(),
+                    detail: detail.into(),
+                    protocol: protocol.into(),
+                    port,
+                    pid,
+                }
             })
             .collect::<Vec<_>>();
 

@@ -3,14 +3,17 @@ import { Txt } from "components.slint";
 export component PortLine inherits Rectangle {
     in property <string> label;
     in property <string> detail;
+    in property <int> pid: 0;
+    in property <bool> busy: false;
     in property <bool> occupied: false;
+    callback close_clicked();
 
-    height: 58px;
+    height: 62px;
     background: #00000000;
 
     Rectangle {
         width: parent.width;
-        height: 52px;
+        height: 56px;
         y: 3px;
         border-radius: 14px;
         border-width: 1px;
@@ -61,6 +64,34 @@ export component PortLine inherits Rectangle {
                 font-weight: 800;
                 horizontal-alignment: right;
                 vertical-alignment: center;
+            }
+
+            close-button := Rectangle {
+                width: 88px;
+                height: 34px;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: occupied && pid > 0 && !busy ? #ffb4ab : #344056;
+                background: occupied && pid > 0 && !busy
+                    ? (close-touch.has-hover ? #4a1d18 : #2a1719)
+                    : #101721;
+
+                animate background { duration: 120ms; }
+                animate border-color { duration: 120ms; }
+
+                Txt {
+                    text: occupied ? "关闭进程" : "无占用";
+                    color: occupied && pid > 0 && !busy ? #ffd9d3 : #657285;
+                    font-size: 11px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                close-touch := TouchArea {
+                    enabled: occupied && pid > 0 && !busy;
+                    clicked => { root.close_clicked(); }
+                }
             }
         }
     }
