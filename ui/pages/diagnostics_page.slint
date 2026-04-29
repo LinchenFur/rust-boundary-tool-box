@@ -49,11 +49,9 @@ export component DiagnosticsPage inherits Rectangle {
                         clicked => { root.detect_processes_clicked(); }
                     }
 
-                    InfoBox {
-                        box-height: 98px;
-                        label: "PORT";
-                        value: "占用端口可在右侧逐项关闭";
-                        accent: #f6c76d;
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: #00000000;
                     }
                 }
             }
