@@ -334,10 +334,17 @@ export component TopSwitch inherits Rectangle {
         spacing: 12px;
 
         Rectangle {
-            width: 36px;
-            height: 36px;
-            border-radius: 10px;
-            background: checked ? #9ef0b5 : #8a96a8;
+            width: 42px;
+            background: #00000000;
+
+            Rectangle {
+                width: 36px;
+                height: 36px;
+                x: 0px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 10px;
+                background: checked ? #9ef0b5 : #8a96a8;
+            }
         }
 
         Txt {
