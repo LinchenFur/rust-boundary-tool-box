@@ -339,6 +339,33 @@ impl AppController {
                 controller.borrow_mut().handle_dialog_secondary();
             });
         }
+        {
+            let ui = controller.borrow().ui.as_weak();
+            ui.unwrap().on_window_drag_started(move || {
+                if let Some(app) = ui.upgrade() {
+                    use slint::winit_030::WinitWindowAccessor;
+                    app.window().with_winit_window(|window| {
+                        let _ = window.drag_window();
+                    });
+                }
+            });
+        }
+        {
+            let ui = controller.borrow().ui.as_weak();
+            ui.unwrap().on_window_minimize_clicked(move || {
+                if let Some(app) = ui.upgrade() {
+                    app.window().set_minimized(true);
+                }
+            });
+        }
+        {
+            let ui = controller.borrow().ui.as_weak();
+            ui.unwrap().on_window_close_clicked(move || {
+                if let Some(app) = ui.upgrade() {
+                    let _ = app.hide();
+                }
+            });
+        }
     }
 
     /// 启动 UI 线程定时器，用于拉取 channel 消息和驱动忙碌动画。

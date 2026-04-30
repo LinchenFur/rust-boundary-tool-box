@@ -131,6 +131,36 @@ export component NavTab inherits Rectangle {
     }
 }
 
+// 无原生边框窗口使用的标题栏按钮。
+export component WindowButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> danger: false;
+    callback clicked;
+
+    width: 46px;
+    height: 30px;
+    border-radius: 8px;
+    background: touch.pressed
+        ? (danger ? #7a1f1f : #202a38)
+        : (touch.has-hover ? (danger ? #c23a3a : #1d2531) : #00000000);
+
+    animate background { duration: 120ms; }
+
+    Txt {
+        text: label;
+        color: touch.has-hover && danger ? #ffffff : #c7d1df;
+        font-family: "Segoe UI";
+        font-size: label == "×" ? 20px : 18px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
 // 带竖向强调条的主/次操作按钮。
 export component Action inherits Rectangle {
     in property <string> label;
