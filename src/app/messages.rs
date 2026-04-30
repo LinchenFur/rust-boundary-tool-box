@@ -54,7 +54,6 @@ impl AppController {
                     dialog,
                     process_status,
                     target,
-                    load_topmost,
                 } => {
                     self.ui.set_busy(false);
                     self.ui.set_status_text(status.into());
@@ -62,7 +61,7 @@ impl AppController {
                         self.ui.set_process_status_text(process_status.into());
                     }
                     if let Some(target) = target {
-                        self.set_current_target(Some(target), "已就绪", load_topmost);
+                        self.set_current_target(Some(target), "已就绪");
                     } else {
                         self.sync_has_target();
                     }
@@ -94,7 +93,7 @@ impl AppController {
                         self.ui.set_auto_mode(false);
                         self.ui.set_manual_path(path.display().to_string().into());
                         self.ui.set_detected_text(dialog.clone().into());
-                        self.set_current_target(Some(path), "已就绪", true);
+                        self.set_current_target(Some(path), "已就绪");
                         self.ui.set_status_text("已找到游戏目录".into());
                     } else {
                         self.ui.set_status_text("未找到游戏目录".into());
@@ -142,19 +141,26 @@ impl AppController {
             .map(|row| {
                 let protocol = row.protocol.to_string();
                 let port = i32::from(row.port);
-                let (occupied, pid, detail) = row
+                let (occupied, expected, pid, detail) = row
                     .conflict
                     .as_ref()
                     .map(|conflict| {
+                        let prefix = if conflict.expected {
+                            "目标进程"
+                        } else {
+                            "异常占用"
+                        };
                         (
                             true,
+                            conflict.expected,
                             i32::try_from(conflict.pid).unwrap_or(0),
-                            format!("占用中：PID {} {}", conflict.pid, conflict.name),
+                            format!("{prefix}：PID {} {}", conflict.pid, conflict.name),
                         )
                     })
-                    .unwrap_or_else(|| (false, 0, "空闲".to_string()));
+                    .unwrap_or_else(|| (false, false, 0, "空闲".to_string()));
                 PortRow {
                     occupied,
+                    expected,
                     label: format!("{}/{}", row.protocol, row.port).into(),
                     detail: detail.into(),
                     protocol: protocol.into(),

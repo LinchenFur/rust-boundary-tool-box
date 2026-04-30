@@ -1,7 +1,7 @@
 //! VNT 状态快照到 Slint 行模型的转换。
 
-use crate::vnt_platform::{self, VntPeer};
-use crate::{AppWindow, VntPeerRow};
+use crate::vnt_platform::{self, VntPeer, VntServer};
+use crate::{AppWindow, VntPeerRow, VntServerRow};
 
 /// 将默认未连接 VNT 状态应用到 Slint 属性。
 pub(crate) fn apply_vnt_idle_to_ui(ui: &AppWindow) {
@@ -14,6 +14,15 @@ pub(crate) fn apply_vnt_idle_to_ui(ui: &AppWindow) {
     ui.set_vnt_server_status_text(snapshot.server.into());
     ui.set_vnt_nat_text(snapshot.nat.into());
     ui.set_vnt_peer_summary_text(snapshot.peer_summary.into());
+}
+
+/// 在 VNT 运行前展示的默认服务器行。
+pub(crate) fn vnt_server_placeholder_rows() -> Vec<VntServerRow> {
+    vnt_platform::idle_snapshot()
+        .servers
+        .into_iter()
+        .map(vnt_server_to_row)
+        .collect()
 }
 
 /// 在 VNT 运行前展示的默认节点行。
@@ -32,5 +41,15 @@ pub(crate) fn vnt_peer_to_row(peer: VntPeer) -> VntPeerRow {
         address: peer.address.into(),
         detail: peer.detail.into(),
         online: peer.online,
+    }
+}
+
+/// 将 VNT 服务器快照映射为 Slint 行。
+pub(crate) fn vnt_server_to_row(server: VntServer) -> VntServerRow {
+    VntServerRow {
+        name: server.name.into(),
+        address: server.address.into(),
+        detail: server.detail.into(),
+        online: server.online,
     }
 }

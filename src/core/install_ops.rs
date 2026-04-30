@@ -43,7 +43,7 @@ impl InstallerCore {
     ///
     /// 在线 ProjectRebound 包会先下载并完整校验，然后才替换目标文件。
     /// 已存在且不属于安装器的文件只备份一次，并记录进 state.json 供后续恢复。
-    pub fn install(&self, target_win64: &Path, keep_topmost: bool, hotkey: &str) -> Result<String> {
+    pub fn install(&self, target_win64: &Path) -> Result<String> {
         self.validate_payload()?;
         validate_win64_path(target_win64)?;
         self.log(format!(
@@ -142,7 +142,6 @@ impl InstallerCore {
             });
         }
 
-        let topmost = self.write_topmost_config(target_win64, keep_topmost, hotkey)?;
         let state = InstallState {
             version: APP_VERSION.to_string(),
             app_id: APP_ID.to_string(),
@@ -156,7 +155,6 @@ impl InstallerCore {
             },
             updated_at: iso_now(),
             managed_items: managed_records,
-            topmost_config: topmost.clone(),
         };
         write_json_file(&paths.state_file, &state)?;
         self.write_markers(target_win64, install_id)?;
@@ -164,18 +162,7 @@ impl InstallerCore {
 
         let mut notes = vec![
             "安装完成。".to_string(),
-            format!("窗口置顶目标：{}（固定）", TOPMOST_GAME_LABEL),
-            format!(
-                "持续置顶：{}",
-                if topmost.keep_topmost {
-                    "已开启"
-                } else {
-                    "已关闭"
-                }
-            ),
-            format!("持续置顶开关键：{}", topmost.hotkey),
             "原版启动脚本：startgame.bat".to_string(),
-            "窗口置顶功能仅由 Rust 工具箱负责，不修改 startgame.bat。".to_string(),
             "Payload.dll 和 ProjectReboundServerWrapper.exe 已从在线 Nightly Release 更新。"
                 .to_string(),
         ];

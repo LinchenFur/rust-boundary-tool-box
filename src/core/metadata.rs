@@ -16,9 +16,6 @@ impl InstallerCore {
         MetadataPaths {
             state_file: metadata_dir.join(STATE_FILE_NAME),
             markers_file: metadata_dir.join(MARKERS_FILE_NAME),
-            topmost_mode_file: metadata_dir.join(TOPMOST_MODE_FILE_NAME),
-            topmost_keep_file: metadata_dir.join(TOPMOST_KEEP_FILE_NAME),
-            topmost_hotkey_file: metadata_dir.join(TOPMOST_HOTKEY_FILE_NAME),
             backups_root: metadata_dir.join("backups"),
             metadata_dir,
         }

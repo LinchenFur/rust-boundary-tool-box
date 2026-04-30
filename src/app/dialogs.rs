@@ -78,14 +78,9 @@ impl AppController {
         match action {
             PendingDialogAction::None => self.hide_app_dialog(),
             PendingDialogAction::ManualPathInput => self.confirm_manual_path_from_dialog(),
-            PendingDialogAction::LaunchWithConflicts {
-                target,
-                keep_topmost,
-                hotkey,
-                conflicts,
-            } => {
+            PendingDialogAction::LaunchWithConflicts { target, conflicts } => {
                 self.hide_app_dialog();
-                self.start_launch_with_conflicts(target, keep_topmost, hotkey, conflicts);
+                self.start_launch_with_conflicts(target, conflicts);
             }
         }
     }
@@ -119,7 +114,7 @@ impl AppController {
                 self.ui.set_auto_mode(false);
                 self.ui.set_manual_path(path.display().to_string().into());
                 self.ui.set_detected_text("已手动设置游戏根目录".into());
-                self.set_current_target(Some(path.clone()), "已就绪", true);
+                self.set_current_target(Some(path.clone()), "已就绪");
                 self.append_log(&format!(
                     "[{}] 手动路径已设置：{}",
                     core::now_text(),

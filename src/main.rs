@@ -5,7 +5,6 @@
 mod app;
 mod core;
 mod vnt_platform;
-mod win;
 
 slint::include_modules!();
 

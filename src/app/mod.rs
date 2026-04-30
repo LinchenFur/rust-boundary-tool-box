@@ -2,15 +2,15 @@
 
 use crate::core;
 use crate::vnt_platform;
-use crate::{AppWindow, DriveRow, PortRow, ServerRow, VntPeerRow};
+use crate::{AppWindow, DriveRow, PortRow, ServerRow, VntPeerRow, VntServerRow};
 
 use std::cell::RefCell;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -19,8 +19,8 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::core::{
-    APP_VERSION, DEFAULT_KEEP_TOPMOST, DEFAULT_TOPMOST_HOTKEY, InstallerCore, MONITORED_PORTS,
-    PathMode, PortConflict, PortStatusRow as CorePortStatusRow, format_port_conflicts,
+    APP_VERSION, InstallerCore, MONITORED_PORTS, PathMode, PortConflict,
+    PortStatusRow as CorePortStatusRow, format_port_conflicts,
 };
 use crate::vnt_platform::{VntEvent, VntLaunchOptions, VntSession};
 
@@ -30,8 +30,8 @@ mod controller;
 mod diagnostics;
 mod dialogs;
 mod drive_scan;
-mod hotkey;
 mod messages;
+mod prefs;
 mod server_list;
 mod servers;
 mod target;
@@ -40,17 +40,14 @@ mod vnt_rows;
 
 use background::spawn_port_thread;
 use diagnostics::{format_process_detection_message, runtime_snapshot_has_any};
-use hotkey::{hotkey_capture_is_escape, hotkey_from_capture};
+use prefs::{AppPrefs, VntPrefs};
 use server_list::{RemoteServer, fetch_servers, server_placeholder_row, server_to_row};
-use vnt_rows::{apply_vnt_idle_to_ui, vnt_peer_to_row, vnt_placeholder_rows};
+use vnt_rows::{
+    apply_vnt_idle_to_ui, vnt_peer_to_row, vnt_placeholder_rows, vnt_server_placeholder_rows,
+    vnt_server_to_row,
+};
 
 pub(crate) fn run() -> Result<()> {
-    let args = std::env::args().collect::<Vec<_>>();
-    // 隐藏子进程使用该模式维持游戏窗口置顶。
-    if let Some(result) = core::watch_mode_from_args(&args) {
-        std::process::exit(result?);
-    }
-
     let app = AppWindow::new()?;
     let controller = AppController::new(app)?;
     AppController::bind_callbacks(&controller);
@@ -78,7 +75,6 @@ enum AppMessage {
         dialog: String,
         process_status: Option<String>,
         target: Option<PathBuf>,
-        load_topmost: bool,
     },
     ActionFailed {
         title: String,
@@ -96,8 +92,6 @@ enum PendingDialogAction {
     None,
     LaunchWithConflicts {
         target: PathBuf,
-        keep_topmost: bool,
-        hotkey: String,
         conflicts: Vec<PortConflict>,
     },
     ManualPathInput,
@@ -110,13 +104,17 @@ struct AppController {
     tx: Sender<AppMessage>,
     rx: Receiver<AppMessage>,
     stop_background: Arc<AtomicBool>,
+    port_target: Arc<RwLock<Option<PathBuf>>>,
     session_log_file: File,
     mode: PathMode,
     current_target: Option<PathBuf>,
     drive_model: Rc<VecModel<DriveRow>>,
     port_model: Rc<VecModel<PortRow>>,
     server_model: Rc<VecModel<ServerRow>>,
+    vnt_server_option_model: Rc<VecModel<SharedString>>,
+    vnt_server_model: Rc<VecModel<VntServerRow>>,
     vnt_peer_model: Rc<VecModel<VntPeerRow>>,
     vnt_session: Option<VntSession>,
+    app_prefs: AppPrefs,
     pending_dialog_action: PendingDialogAction,
 }

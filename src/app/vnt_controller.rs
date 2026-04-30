@@ -3,11 +3,34 @@
 use super::*;
 
 impl AppController {
+    /// 将用户输入的 VNT 服务器地址加入下拉框，并立即切换到这个地址。
+    pub(super) fn add_vnt_server_option(&mut self, address: String) {
+        let address = address.trim().to_string();
+        if address.is_empty() {
+            return;
+        }
+
+        let exists = (0..self.vnt_server_option_model.row_count()).any(|index| {
+            self.vnt_server_option_model
+                .row_data(index)
+                .map(|item| item.as_str().eq_ignore_ascii_case(&address))
+                .unwrap_or(false)
+        });
+        if !exists {
+            self.vnt_server_option_model.push(address.clone().into());
+        }
+
+        self.ui.set_vnt_server_text(address.into());
+        self.ui.set_vnt_new_server_text("".into());
+        self.save_app_prefs();
+    }
+
     /// 启动本地并入的 VNT 核心，并将状态流式同步到 UI。
     pub(super) fn start_vnt(&mut self) {
         if self.vnt_session.is_some() || self.ui.get_vnt_busy() {
             return;
         }
+        self.save_app_prefs();
 
         let options = VntLaunchOptions {
             server_text: self.ui.get_vnt_server_text().to_string(),
@@ -78,6 +101,7 @@ impl AppController {
                 self.ui.set_vnt_running(false);
                 self.ui.set_vnt_status_text("启动失败".into());
                 self.ui.set_vnt_detail_text(error.clone().into());
+                self.set_vnt_server_rows(vnt_server_placeholder_rows());
                 self.set_vnt_peer_rows(vnt_placeholder_rows());
                 self.append_log(&format!("[{}] VNT 异常：{}", core::now_text(), error));
                 self.show_error_dialog("联机", &error);
@@ -106,7 +130,30 @@ impl AppController {
         if !snapshot.network_code.is_empty() && snapshot.network_code != "-" {
             self.ui.set_vnt_network_code(snapshot.network_code.into());
         }
+        self.set_vnt_server_rows(
+            snapshot
+                .servers
+                .into_iter()
+                .map(vnt_server_to_row)
+                .collect(),
+        );
         self.set_vnt_peer_rows(snapshot.peers.into_iter().map(vnt_peer_to_row).collect());
+    }
+
+    /// 为 ListView 原地同步 VNT 服务器模型。
+    pub(super) fn set_vnt_server_rows(&mut self, rows: Vec<VntServerRow>) {
+        while self.vnt_server_model.row_count() > rows.len() {
+            let _ = self
+                .vnt_server_model
+                .remove(self.vnt_server_model.row_count() - 1);
+        }
+        for (index, row) in rows.into_iter().enumerate() {
+            if index < self.vnt_server_model.row_count() {
+                self.vnt_server_model.set_row_data(index, row);
+            } else {
+                self.vnt_server_model.push(row);
+            }
+        }
     }
 
     /// 为 ListView 原地同步节点模型。
@@ -122,6 +169,55 @@ impl AppController {
             } else {
                 self.vnt_peer_model.push(row);
             }
+        }
+    }
+
+    /// 从当前 UI 收集联机页偏好设置。
+    pub(super) fn current_vnt_prefs(&self) -> VntPrefs {
+        let server_text = self.ui.get_vnt_server_text().trim().to_string();
+        let mut server_options = Vec::new();
+        for index in 0..self.vnt_server_option_model.row_count() {
+            if let Some(option) = self.vnt_server_option_model.row_data(index) {
+                let option = option.trim();
+                if option.is_empty() {
+                    continue;
+                }
+                if !server_options
+                    .iter()
+                    .any(|existing: &String| existing.eq_ignore_ascii_case(option))
+                {
+                    server_options.push(option.to_string());
+                }
+            }
+        }
+        if !server_text.is_empty()
+            && !server_options
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&server_text))
+        {
+            server_options.push(server_text.clone());
+        }
+
+        VntPrefs {
+            server_text,
+            server_options,
+            network_code: self.ui.get_vnt_network_code().trim().to_string(),
+            password: self.ui.get_vnt_password().to_string(),
+            no_tun: self.ui.get_vnt_no_tun(),
+            compress: self.ui.get_vnt_compress(),
+            rtx: self.ui.get_vnt_rtx(),
+        }
+    }
+
+    /// 保存应用级偏好设置；失败只写日志，不打断用户操作。
+    pub(super) fn save_app_prefs(&mut self) {
+        self.app_prefs.vnt = self.current_vnt_prefs();
+        if let Err(error) = self.app_prefs.save(&self.core.installer_home) {
+            self.append_log(&format!(
+                "[{}] 应用配置保存失败：{}",
+                core::now_text(),
+                error
+            ));
         }
     }
 }

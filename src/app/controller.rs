@@ -13,6 +13,7 @@ impl AppController {
         });
 
         let core = Arc::new(InstallerCore::new(logger)?);
+        let port_target = Arc::new(RwLock::new(None));
         let logs_dir = core.installer_home.join("logs");
         fs::create_dir_all(&logs_dir)?;
         let session_log_path = logs_dir.join(format!(
@@ -47,6 +48,25 @@ impl AppController {
             core::now_text(),
             session_log_path.display()
         )?;
+        let app_prefs = match AppPrefs::load(&core.installer_home) {
+            Ok(prefs) => prefs,
+            Err(error) => {
+                let backup_text = match AppPrefs::preserve_invalid(&core.installer_home) {
+                    Ok(Some(path)) => format!("；已备份到 {}", path.display()),
+                    Ok(None) => String::new(),
+                    Err(backup_error) => format!("；备份损坏配置失败：{backup_error}"),
+                };
+                writeln!(
+                    session_log_file,
+                    "[{}] 应用配置读取失败，使用默认值：{}{}",
+                    core::now_text(),
+                    error,
+                    backup_text
+                )?;
+                AppPrefs::default()
+            }
+        };
+        let vnt_prefs = app_prefs.vnt.clone();
 
         // 对 Slint 模型只创建一次，后续原地更新，避免破坏已有 ListView 绑定。
         let port_model = Rc::new(VecModel::from(
@@ -59,6 +79,7 @@ impl AppController {
                     port: i32::from(*port),
                     pid: 0,
                     occupied: false,
+                    expected: false,
                 })
                 .collect::<Vec<_>>(),
         ));
@@ -67,22 +88,29 @@ impl AppController {
             "正在加载服务器列表",
             "等待接口返回数据",
         )]));
+        let vnt_server_option_model = Rc::new(VecModel::from(
+            vnt_prefs
+                .server_options
+                .iter()
+                .map(|server| SharedString::from(server.as_str()))
+                .collect::<Vec<_>>(),
+        ));
+        let vnt_server_model = Rc::new(VecModel::from(vnt_server_placeholder_rows()));
         let vnt_peer_model = Rc::new(VecModel::from(vnt_placeholder_rows()));
         ui.set_port_rows(ModelRc::from(port_model.clone()));
         ui.set_drive_rows(ModelRc::from(drive_model.clone()));
         ui.set_server_rows(ModelRc::from(server_model.clone()));
+        ui.set_vnt_server_options(ModelRc::from(vnt_server_option_model.clone()));
+        ui.set_vnt_server_rows(ModelRc::from(vnt_server_model.clone()));
         ui.set_vnt_peer_rows(ModelRc::from(vnt_peer_model.clone()));
         ui.set_payload_label(core.payload_label().into());
         ui.set_detected_text("正在检测 Steam 安装目录...".into());
         ui.set_target_text("未解析到有效的安装目录".into());
-        ui.set_keep_topmost(DEFAULT_KEEP_TOPMOST);
-        ui.set_hotkey_text(DEFAULT_TOPMOST_HOTKEY.into());
         ui.set_status_text(format!("准备就绪 / v{}", APP_VERSION).into());
         ui.set_process_status_text("运行进程：未检测".into());
         ui.set_show_logs(false);
         ui.set_busy(false);
         ui.set_pulse(false);
-        ui.set_hotkey_listening(false);
         ui.set_auto_mode(true);
         ui.set_has_target(false);
         ui.set_servers_loading(false);
@@ -97,12 +125,13 @@ impl AppController {
         ui.set_app_dialog_input_text("".into());
         ui.set_app_dialog_primary_text("确定".into());
         ui.set_app_dialog_secondary_text("取消".into());
-        ui.set_vnt_server_text("101.35.230.139:6660".into());
-        ui.set_vnt_network_code("".into());
-        ui.set_vnt_password("".into());
-        ui.set_vnt_no_tun(false);
-        ui.set_vnt_compress(false);
-        ui.set_vnt_rtx(false);
+        ui.set_vnt_server_text(vnt_prefs.server_text.into());
+        ui.set_vnt_new_server_text("".into());
+        ui.set_vnt_network_code(vnt_prefs.network_code.into());
+        ui.set_vnt_password(vnt_prefs.password.into());
+        ui.set_vnt_no_tun(vnt_prefs.no_tun);
+        ui.set_vnt_compress(vnt_prefs.compress);
+        ui.set_vnt_rtx(vnt_prefs.rtx);
         ui.set_vnt_busy(false);
         ui.set_vnt_running(false);
         apply_vnt_idle_to_ui(&ui);
@@ -113,14 +142,18 @@ impl AppController {
             tx,
             rx,
             stop_background: Arc::new(AtomicBool::new(false)),
+            port_target,
             session_log_file,
             mode: PathMode::Auto,
             current_target: None,
             drive_model,
             port_model,
             server_model,
+            vnt_server_option_model,
+            vnt_server_model,
             vnt_peer_model,
             vnt_session: None,
+            app_prefs,
             pending_dialog_action: PendingDialogAction::None,
         }));
 
@@ -129,6 +162,7 @@ impl AppController {
             controller.borrow().core.clone(),
             controller.borrow().tx.clone(),
             controller.borrow().stop_background.clone(),
+            controller.borrow().port_target.clone(),
         );
         Ok(controller)
     }
@@ -174,31 +208,6 @@ impl AppController {
             ui.unwrap().on_scan_clicked(move || {
                 controller.borrow_mut().open_drive_dialog();
             });
-        }
-        {
-            let controller = Rc::clone(controller);
-            ui.unwrap().on_keep_topmost_toggled(move |value| {
-                controller.borrow().ui.set_keep_topmost(value);
-            });
-        }
-        {
-            let controller = Rc::clone(controller);
-            ui.unwrap().on_hotkey_text_changed(move |text| {
-                controller.borrow().ui.set_hotkey_text(text);
-            });
-        }
-        {
-            let controller = Rc::clone(controller);
-            ui.unwrap()
-                .on_hotkey_captured(move |text, control, alt, shift, meta| {
-                    controller.borrow_mut().capture_hotkey(
-                        text.to_string(),
-                        control,
-                        alt,
-                        shift,
-                        meta,
-                    );
-                });
         }
         {
             let controller = Rc::clone(controller);
@@ -273,6 +282,20 @@ impl AppController {
         }
         {
             let controller = Rc::clone(controller);
+            ui.unwrap().on_vnt_add_server_clicked(move |address| {
+                controller
+                    .borrow_mut()
+                    .add_vnt_server_option(address.to_string());
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_vnt_settings_changed(move || {
+                controller.borrow_mut().save_app_prefs();
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
             ui.unwrap().on_toggle_logs_clicked(move || {
                 let current = controller.borrow().ui.get_show_logs();
                 controller.borrow().ui.set_show_logs(!current);
@@ -342,6 +365,7 @@ impl AppController {
 
     /// 在 UI 退出前停止后台会话。
     pub(super) fn shutdown(&mut self) {
+        self.save_app_prefs();
         if let Some(session) = self.vnt_session.as_mut() {
             session.stop();
         }

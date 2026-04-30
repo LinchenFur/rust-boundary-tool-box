@@ -34,13 +34,10 @@ winreg = "0.56.0"
 zip = { version = "8.5.1", default-features = true, features = ["deflate"] }
 
 [dependencies.windows]
-# 使用 Win32 API 实现窗口置顶守护、快捷键和原子文件替换。
+# 使用 Win32 API 实现原子文件替换。
 version = "0.62.2"
 features = [
   "Win32_Foundation",
-  "Win32_UI_WindowsAndMessaging",
-  "Win32_UI_Input_KeyboardAndMouse",
-  "Win32_System_Threading",
   "Win32_Storage_FileSystem",
 ]
 

@@ -10,6 +10,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
+use chrono::{Local, TimeZone};
 use tokio::sync::oneshot;
 use vnt_core::context::config::Config;
 use vnt_core::core::{NetworkManager, RegisterResponse};
@@ -39,6 +40,15 @@ pub struct VntPeer {
     pub online: bool,
 }
 
+/// 在 UI 中展示的单个 VNT 服务器行。
+#[derive(Debug, Clone)]
+pub struct VntServer {
+    pub name: String,
+    pub address: String,
+    pub detail: String,
+    pub online: bool,
+}
+
 /// 当前 VNT 网络状态的 UI 快照。
 #[derive(Debug, Clone)]
 pub struct VntSnapshot {
@@ -51,6 +61,7 @@ pub struct VntSnapshot {
     pub server: String,
     pub nat: String,
     pub peer_summary: String,
+    pub servers: Vec<VntServer>,
     pub peers: Vec<VntPeer>,
 }
 
@@ -119,10 +130,16 @@ pub fn idle_snapshot() -> VntSnapshot {
         server: "-".to_string(),
         nat: "-".to_string(),
         peer_summary: "0 个节点".to_string(),
+        servers: vec![VntServer {
+            name: "暂无服务器".to_string(),
+            address: "启动联机后会显示 VNT 服务器".to_string(),
+            detail: "VNT 原生核心未运行".to_string(),
+            online: false,
+        }],
         peers: vec![VntPeer {
             name: "暂无联机节点".to_string(),
-            address: "启动联机后会显示同网络设备".to_string(),
-            detail: "VNT 原生核心未运行".to_string(),
+            address: String::new(),
+            detail: "启动联机后会显示同网络设备".to_string(),
             online: false,
         }],
     }
@@ -178,6 +195,7 @@ async fn run_vnt(
         detail: "正在初始化 VNT 原生核心".to_string(),
         network_code: options.network_code.trim().to_string(),
         server: split_servers(&options.server_text).join(", "),
+        servers: configured_server_rows(&options.server_text),
         ..idle_snapshot()
     }));
 
@@ -202,6 +220,7 @@ async fn run_vnt(
         detail: "正在连接服务器并注册虚拟网络".to_string(),
         network_code: options.network_code.trim().to_string(),
         server: split_servers(&options.server_text).join(", "),
+        servers: server_rows_from_api(&api),
         ..idle_snapshot()
     }));
 
@@ -225,6 +244,7 @@ async fn run_vnt(
                             detail: format!("注册失败，5 秒后重试：{error}"),
                             network_code: options.network_code.trim().to_string(),
                             server: split_servers(&options.server_text).join(", "),
+                            servers: server_rows_from_api(&api),
                             ..idle_snapshot()
                         }));
                         tokio::select! {
@@ -250,6 +270,7 @@ async fn run_vnt(
             network_code: options.network_code.trim().to_string(),
             virtual_ip: reg_msg.ip.to_string(),
             server: split_servers(&options.server_text).join(", "),
+            servers: server_rows_from_api(&api),
             ..idle_snapshot()
         }));
         network_manager
@@ -361,13 +382,29 @@ fn snapshot_from_api(
         .iter()
         .filter(|server| server.connected)
         .count();
+    let servers = if server_nodes.is_empty() {
+        config
+            .as_ref()
+            .map(|config| {
+                config
+                    .server_addr
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .map(|text| configured_server_rows(&text))
+            .unwrap_or_else(|| idle_snapshot().servers)
+    } else {
+        server_rows_from_nodes(server_nodes.clone())
+    };
     let nat_info = api.nat_info();
 
     let peers = if clients.is_empty() {
         vec![VntPeer {
             name: "暂无联机节点".to_string(),
-            address: "等待同网络设备上线".to_string(),
-            detail: "同一网络编号的设备会显示在这里".to_string(),
+            address: String::new(),
+            detail: "等待同网络编号设备上线".to_string(),
             online: false,
         }]
     } else {
@@ -448,8 +485,88 @@ fn snapshot_from_api(
                 .filter(|peer| peer.name != "暂无联机节点")
                 .count()
         ),
+        servers,
         peers,
     }
+}
+
+/// 在 VNT 核心尚未创建 API 时，从用户输入生成服务器占位行。
+fn configured_server_rows(raw: &str) -> Vec<VntServer> {
+    let servers = split_servers(raw);
+    if servers.is_empty() {
+        return idle_snapshot().servers;
+    }
+
+    servers
+        .into_iter()
+        .enumerate()
+        .map(|(index, address)| VntServer {
+            name: format!("服务器 {}", index + 1),
+            address,
+            detail: "等待 VNT 原生核心连接".to_string(),
+            online: false,
+        })
+        .collect()
+}
+
+/// 从 VNT 原生 API 读取所有服务器节点。
+fn server_rows_from_api(api: &vnt_core::api::VntApi) -> Vec<VntServer> {
+    server_rows_from_nodes(api.server_node_list())
+}
+
+/// 将 VNT 原生服务器节点整理为 UI 行，保持 server_id 顺序稳定。
+fn server_rows_from_nodes(mut nodes: Vec<vnt_core::context::ServerNodeInfo>) -> Vec<VntServer> {
+    if nodes.is_empty() {
+        return idle_snapshot().servers;
+    }
+
+    nodes.sort_by_key(|node| node.server_id);
+    nodes
+        .into_iter()
+        .map(|node| {
+            let rtt = node
+                .rtt
+                .map(|value| format!("{value} ms"))
+                .unwrap_or_else(|| "-".to_string());
+            let online_clients = node
+                .client_map
+                .values()
+                .filter(|client| client.online)
+                .count();
+            let version = node
+                .server_version
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or("-");
+            let time_text = if node.connected {
+                format_vnt_time(node.last_connected_time)
+                    .map(|time| format!("连接于 {time}"))
+                    .unwrap_or_else(|| "已连接".to_string())
+            } else {
+                format_vnt_time(node.disconnected_time)
+                    .map(|time| format!("断开于 {time}"))
+                    .unwrap_or_else(|| "等待连接".to_string())
+            };
+
+            VntServer {
+                name: format!("服务器 {}", node.server_id + 1),
+                address: node.server_addr.to_string(),
+                detail: format!(
+                    "延迟 {rtt} / 节点 {online_clients} / 版本 {version} / {time_text}"
+                ),
+                online: node.connected,
+            }
+        })
+        .collect()
+}
+
+/// 将 VNT 内部毫秒时间戳格式化为本地时间，异常时间戳直接忽略。
+fn format_vnt_time(timestamp_ms: Option<i64>) -> Option<String> {
+    let timestamp_ms = timestamp_ms?;
+    Local
+        .timestamp_millis_opt(timestamp_ms)
+        .single()
+        .map(|time| time.format("%H:%M:%S").to_string())
 }
 
 /// 在 VNT 网络内使用的稳定设备显示名。

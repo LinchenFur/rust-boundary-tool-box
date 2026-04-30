@@ -5,6 +5,7 @@ export struct PortRow {
     port: int,
     pid: int,
     occupied: bool,
+    expected: bool,
 }
 
 export struct DriveRow {
@@ -28,3 +29,9 @@ export struct VntPeerRow {
     online: bool,
 }
 
+export struct VntServerRow {
+    name: string,
+    address: string,
+    detail: string,
+    online: bool,
+}

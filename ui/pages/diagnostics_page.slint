@@ -1,6 +1,6 @@
 import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
 import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
-import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, TopSwitch, Txt } from "../components.slint";
+import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, Txt } from "../components.slint";
 import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
 
 export component DiagnosticsPage inherits Rectangle {
@@ -94,6 +94,7 @@ export component DiagnosticsPage inherits Rectangle {
                             pid: port_row.pid;
                             busy: root.busy;
                             occupied: port_row.occupied;
+                            expected: port_row.expected;
                             close_clicked => {
                                 root.stop_port_process_clicked(port_row.protocol, port_row.port, port_row.pid);
                             }

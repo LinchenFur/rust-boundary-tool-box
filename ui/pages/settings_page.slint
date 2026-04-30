@@ -1,135 +1,82 @@
-import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
-import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
-import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, TopSwitch, Txt } from "../components.slint";
-import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+import { Action, DetailRow, Panel, TitleBlock } from "../components.slint";
 
 export component SettingsPage inherits Rectangle {
-    in-out property <bool> hotkey_listening;
-    in property <bool> keep_topmost;
     in property <bool> busy;
     in property <bool> has_target;
-    in property <string> hotkey_text;
     in property <string> status_text;
     in property <string> target_text;
     in property <string> process_status_text;
     in property <string> server_status_text;
-    callback keep_topmost_toggled(value: bool);
-    callback hotkey_captured(text: string, control: bool, alt: bool, shift: bool, meta: bool);
     callback open_logs_clicked();
-        // 页面 3：置顶行为、快捷键捕获和详细状态。
-        HorizontalLayout {
-            width: parent.width;
-            height: parent.height;
-            spacing: 16px;
 
-            Panel {
-                width: 420px;
-                vertical-stretch: 1;
-                radius: 26px;
+    // 页面 3：工具状态和日志入口。
+    HorizontalLayout {
+        width: parent.width;
+        height: parent.height;
+        spacing: 16px;
 
-                VerticalLayout {
-                    padding: 24px;
-                    spacing: 16px;
+        Panel {
+            width: 360px;
+            vertical-stretch: 1;
+            radius: 26px;
 
-                    TitleBlock {
-                        title: "窗口置顶";
-                        sub: "启动后窗口置顶与快捷键";
-                    }
+            VerticalLayout {
+                padding: 24px;
+                spacing: 16px;
 
-                    hotkey-focus := FocusScope {
-                        width: 0px;
-                        height: 0px;
-                        enabled: hotkey_listening;
-                        focus-on-click: false;
-                        focus-on-tab-navigation: false;
-
-                        key-pressed(event) => {
-                            // 由 Rust 负责规范化捕获到的按键文本，并把 Esc 视为取消监听。
-                            if hotkey_listening && !event.repeat {
-                                root.hotkey_captured(
-                                    event.text,
-                                    event.modifiers.control,
-                                    event.modifiers.alt,
-                                    event.modifiers.shift,
-                                    event.modifiers.meta
-                                );
-                                return accept;
-                            }
-                            return reject;
-                        }
-                    }
-
-                    TopSwitch {
-                        checked: keep_topmost;
-                        toggled(value) => { root.keep_topmost_toggled(value); }
-                    }
-
-                    Action {
-                        label: hotkey_listening ? "正在监听快捷键" : "点击监听快捷键";
-                        sub: hotkey_listening ? "按下组合键，Esc 退出设置" : "当前：" + hotkey_text;
-                        enabled: !busy;
-                        accent: hotkey_listening ? #f6c76d : #a8d8ff;
-                        clicked => {
-                            root.hotkey_listening = true;
-                            hotkey-focus.focus();
-                        }
-                    }
-
-                    Action {
-                        label: "打开日志目录";
-                        sub: "查看工具运行记录";
-                        enabled: !busy;
-                        accent: #a8d8ff;
-                        clicked => { root.open_logs_clicked(); }
-                    }
+                TitleBlock {
+                    title: "设置";
+                    sub: "工具运行记录与当前状态";
                 }
-            }
 
-            Panel {
-                horizontal-stretch: 1;
-                vertical-stretch: 1;
-                radius: 26px;
-
-                VerticalLayout {
-                    padding: 24px;
-                    spacing: 16px;
-
-                    TitleBlock {
-                        title: "详细状态";
-                        sub: "当前目标、进程、服务与置顶状态";
-                    }
-
-                    DetailRow {
-                        label: "操作状态";
-                        value: status_text;
-                        accent: busy ? #ffb4ab : #9ef0b5;
-                    }
-
-                    DetailRow {
-                        label: "目标目录";
-                        value: has_target ? target_text : "未锁定游戏根目录";
-                        accent: has_target ? #9ef0b5 : #f6c76d;
-                    }
-
-                    DetailRow {
-                        label: "进程状态";
-                        value: process_status_text;
-                        accent: #d7c4ff;
-                    }
-
-                    DetailRow {
-                        label: "服务器列表";
-                        value: server_status_text;
-                        accent: #a8d8ff;
-                    }
-
-                    DetailRow {
-                        label: "置顶设置";
-                        value: (keep_topmost ? "启动后默认保持置顶" : "启动后默认不置顶") + " / 快捷键 " + hotkey_text;
-                        accent: keep_topmost ? #9ef0b5 : #95a3b8;
-                    }
+                Action {
+                    label: "打开日志目录";
+                    sub: "查看工具运行记录";
+                    enabled: !busy;
+                    accent: #a8d8ff;
+                    clicked => { root.open_logs_clicked(); }
                 }
             }
         }
-}
 
+        Panel {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            radius: 26px;
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 16px;
+
+                TitleBlock {
+                    title: "详细状态";
+                    sub: "当前目标、进程与服务状态";
+                }
+
+                DetailRow {
+                    label: "操作状态";
+                    value: status_text;
+                    accent: busy ? #ffb4ab : #9ef0b5;
+                }
+
+                DetailRow {
+                    label: "目标目录";
+                    value: has_target ? target_text : "未锁定游戏根目录";
+                    accent: has_target ? #9ef0b5 : #f6c76d;
+                }
+
+                DetailRow {
+                    label: "进程状态";
+                    value: process_status_text;
+                    accent: #d7c4ff;
+                }
+
+                DetailRow {
+                    label: "服务器列表";
+                    value: server_status_text;
+                    accent: #a8d8ff;
+                }
+            }
+        }
+    }
+}

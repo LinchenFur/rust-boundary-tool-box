@@ -1,7 +1,8 @@
 //! 应用后台轮询线程。
 
-use std::sync::Arc;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -15,10 +16,12 @@ pub(super) fn spawn_port_thread(
     core: Arc<InstallerCore>,
     tx: Sender<AppMessage>,
     stop: Arc<AtomicBool>,
+    target: Arc<RwLock<Option<PathBuf>>>,
 ) {
     thread::spawn(move || {
         while !stop.load(Ordering::Relaxed) {
-            if let Ok(rows) = core.port_status_rows() {
+            let target_path = target.read().ok().and_then(|guard| guard.clone());
+            if let Ok(rows) = core.port_status_rows_for_target(target_path.as_deref()) {
                 let _ = tx.send(AppMessage::PortRows(rows));
             }
             thread::sleep(Duration::from_secs(2));

@@ -6,7 +6,12 @@ export component PortLine inherits Rectangle {
     in property <int> pid: 0;
     in property <bool> busy: false;
     in property <bool> occupied: false;
+    in property <bool> expected: false;
     callback close_clicked();
+
+    property <brush> status-accent: occupied ? (expected ? #8ecbff : #ffb4ab) : #9ef0b5;
+    property <brush> status-fill: occupied ? (expected ? #0d2238 : #241217) : #0f131a;
+    property <brush> status-text: occupied ? (expected ? #dbeafe : #ffd9d3) : #95a3b8;
 
     height: 62px;
     background: #00000000;
@@ -17,8 +22,8 @@ export component PortLine inherits Rectangle {
         y: 3px;
         border-radius: 14px;
         border-width: 1px;
-        border-color: occupied ? #ffb4ab : #344056;
-        background: occupied ? #241217 : #0f131a;
+        border-color: occupied ? status-accent : #344056;
+        background: status-fill;
 
         HorizontalLayout {
             padding-left: 14px;
@@ -34,7 +39,7 @@ export component PortLine inherits Rectangle {
                     height: 30px;
                     y: (parent.height - self.height) / 2;
                     border-radius: 3px;
-                    background: occupied ? #ffb4ab : #9ef0b5;
+                    background: status-accent;
                 }
             }
 
@@ -49,7 +54,7 @@ export component PortLine inherits Rectangle {
 
             Txt {
                 text: detail;
-                color: occupied ? #ffd9d3 : #95a3b8;
+                color: status-text;
                 font-size: 12px;
                 font-weight: 500;
                 horizontal-stretch: 1;
@@ -67,9 +72,9 @@ export component PortLine inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     border-radius: 10px;
                     border-width: 1px;
-                    border-color: !busy ? #ffb4ab : #344056;
+                    border-color: !busy ? status-accent : #344056;
                     background: !busy
-                        ? (close-touch.has-hover ? #4a1d18 : #2a1719)
+                        ? (expected ? (close-touch.has-hover ? #16344f : #101f32) : (close-touch.has-hover ? #4a1d18 : #2a1719))
                         : #101721;
 
                     animate background { duration: 120ms; }
@@ -77,7 +82,7 @@ export component PortLine inherits Rectangle {
 
                     Txt {
                         text: "关闭进程";
-                        color: !busy ? #ffd9d3 : #657285;
+                        color: !busy ? status-text : #657285;
                         font-size: 11px;
                         font-weight: 800;
                         horizontal-alignment: center;
@@ -94,7 +99,7 @@ export component PortLine inherits Rectangle {
             if !occupied || pid <= 0 : Txt {
                 text: occupied ? "占用" : "空闲";
                 min-width: 52px;
-                color: occupied ? #ffb4ab : #9ef0b5;
+                color: status-accent;
                 font-size: 12px;
                 font-weight: 800;
                 horizontal-alignment: right;
@@ -267,12 +272,12 @@ export component VntPeerLine inherits Rectangle {
     in property <string> detail;
     in property <bool> online: false;
 
-    height: 64px;
+    height: 70px;
     background: #00000000;
 
     Rectangle {
         width: parent.width;
-        height: 58px;
+        height: 64px;
         y: 3px;
         border-radius: 15px;
         border-width: 1px;
@@ -285,18 +290,15 @@ export component VntPeerLine inherits Rectangle {
             spacing: 12px;
 
             Rectangle {
-                width: 34px;
-                height: 34px;
-                border-radius: 17px;
-                background: online ? #9ef0b5 : #344056;
+                width: 6px;
+                background: #00000000;
 
-                Txt {
-                    text: online ? "ON" : "--";
-                    color: online ? #08231d : #c7d1df;
-                    font-size: 10px;
-                    font-weight: 800;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                Rectangle {
+                    width: parent.width;
+                    height: 34px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: online ? #9ef0b5 : #54617a;
                 }
             }
 
@@ -306,21 +308,131 @@ export component VntPeerLine inherits Rectangle {
                 horizontal-stretch: 1;
 
                 Txt {
-                    text: name + "  /  " + address;
+                    text: name;
                     color: #eef4fb;
                     font-size: 14px;
-                    font-weight: 700;
+                    font-weight: 800;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+
+                Txt {
+                    text: address == "" ? detail : (detail == "" ? address : address + "  /  " + detail);
+                    color: online ? #b9f6c9 : #95a3b8;
+                    font-size: 12px;
+                    font-weight: 500;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+            }
+
+            Rectangle {
+                width: 72px;
+                height: 28px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: online ? #9ef0b5 : #344056;
+                background: online ? #163b25 : #101721;
+
+                Txt {
+                    text: online ? "在线" : "等待";
+                    color: online ? #9ef0b5 : #95a3b8;
+                    font-size: 12px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+export component VntServerLine inherits Rectangle {
+    in property <string> name;
+    in property <string> address;
+    in property <string> detail;
+    in property <bool> online: false;
+
+    height: 76px;
+    background: #00000000;
+
+    Rectangle {
+        width: parent.width;
+        height: 70px;
+        y: 3px;
+        border-radius: 15px;
+        border-width: 1px;
+        border-color: online ? #9ef0b5 : #344056;
+        background: online ? #0c2b1b : #0f131a;
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 6px;
+                background: #00000000;
+
+                Rectangle {
+                    width: parent.width;
+                    height: 34px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: online ? #9ef0b5 : #54617a;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                horizontal-stretch: 1;
+
+                Txt {
+                    text: name;
+                    color: #eef4fb;
+                    font-size: 14px;
+                    font-weight: 800;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+
+                Txt {
+                    text: address;
+                    color: #95a3b8;
+                    font-size: 12px;
+                    font-weight: 500;
                     horizontal-stretch: 1;
                     wrap: no-wrap;
                 }
 
                 Txt {
                     text: detail;
-                    color: #95a3b8;
-                    font-size: 12px;
+                    color: online ? #b9f6c9 : #8793a6;
+                    font-size: 11px;
                     font-weight: 500;
                     horizontal-stretch: 1;
                     wrap: no-wrap;
+                }
+            }
+
+            Rectangle {
+                width: 72px;
+                height: 28px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: online ? #9ef0b5 : #344056;
+                background: online ? #163b25 : #101721;
+
+                Txt {
+                    text: online ? "在线" : "离线";
+                    color: online ? #9ef0b5 : #95a3b8;
+                    font-size: 12px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
         }

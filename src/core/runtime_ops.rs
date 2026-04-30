@@ -1,7 +1,5 @@
 //! InstallerCore 启动、进程和端口运行时操作。
 
-use std::collections::HashMap;
-use std::env;
 use std::path::Path;
 use std::process::Command;
 use std::thread;
@@ -49,7 +47,6 @@ impl InstallerCore {
         let wrapper_exe = path_match_key(&files.wrapper_exe);
         let node_exe = path_match_key(&files.node_exe);
         let target_dir = path_match_key(target_win64);
-        let watcher_exe = path_match_key(&env::current_exe()?);
 
         let mut system = System::new_all();
         system.refresh_all();
@@ -91,8 +88,6 @@ impl InstallerCore {
                 snapshot.wrapper.push(item);
             } else if exe_lower == node_exe || (name_lower == "node.exe" && launched_from_target) {
                 snapshot.server.push(item);
-            } else if exe_lower == watcher_exe && cmd_lower.contains("--watch-pid") {
-                snapshot.watcher.push(item);
             }
         }
         Ok(snapshot)
@@ -103,22 +98,58 @@ impl InstallerCore {
         collect_port_conflicts()
     }
 
-    /// 为 UI 端口列表构造固定顺序的诊断行。
-    pub fn port_status_rows(&self) -> Result<Vec<PortStatusRow>> {
-        let conflicts = self.collect_port_conflicts()?;
-        let mut map = HashMap::new();
-        for conflict in conflicts {
-            map.insert((conflict.protocol.to_uppercase(), conflict.port), conflict);
+    /// 为 UI 端口列表构造固定顺序的诊断行，并按当前目标目录标记预期进程。
+    pub fn port_status_rows_for_target(
+        &self,
+        target_win64: Option<&Path>,
+    ) -> Result<Vec<PortStatusRow>> {
+        let mut conflicts = self.collect_port_conflicts()?;
+        if let Some(target) = target_win64 {
+            self.mark_expected_port_conflicts(target, &mut conflicts);
         }
-        let rows = MONITORED_PORTS
-            .iter()
-            .map(|(protocol, port)| PortStatusRow {
-                protocol,
-                port: *port,
-                conflict: map.get(&(protocol.to_string(), *port)).cloned(),
-            })
-            .collect();
+
+        let mut rows = Vec::new();
+        for (protocol, port) in MONITORED_PORTS.iter().copied() {
+            let mut matches = conflicts
+                .iter()
+                .filter(|conflict| {
+                    conflict.protocol.eq_ignore_ascii_case(protocol) && conflict.port == port
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            // 同一端口有多个 PID 时全部展示；异常占用排在前面，避免被目标进程视觉上遮住。
+            matches.sort_by_key(|conflict| (conflict.expected, conflict.pid));
+            if matches.is_empty() {
+                rows.push(PortStatusRow {
+                    protocol,
+                    port,
+                    conflict: None,
+                });
+            } else {
+                for conflict in matches {
+                    rows.push(PortStatusRow {
+                        protocol,
+                        port,
+                        conflict: Some(conflict),
+                    });
+                }
+            }
+        }
         Ok(rows)
+    }
+
+    /// 根据当前目标目录的运行时快照给端口冲突打标；失败时保留端口结果继续展示。
+    fn mark_expected_port_conflicts(&self, target_win64: &Path, conflicts: &mut [PortConflict]) {
+        let Ok(snapshot) = self.collect_runtime_processes(target_win64) else {
+            return;
+        };
+        let expected_pids = [&snapshot.game, &snapshot.wrapper, &snapshot.server]
+            .into_iter()
+            .flat_map(|group| group.iter().map(|process| process.pid))
+            .collect::<Vec<_>>();
+        for conflict in conflicts {
+            conflict.expected = conflict.pid > 0 && expected_pids.contains(&conflict.pid);
+        }
     }
 
     /// 结束占用必要端口的进程。
@@ -146,16 +177,11 @@ impl InstallerCore {
         ))
     }
 
-    /// 结束游戏、服务包装器、登录服务器和置顶守护进程。
+    /// 结束游戏、服务包装器和登录服务器进程。
     pub fn stop_runtime_processes(&self, target_win64: &Path) -> Result<String> {
         let snapshot = self.collect_runtime_processes(target_win64)?;
         let mut pids = Vec::new();
-        for group in [
-            &snapshot.watcher,
-            &snapshot.game,
-            &snapshot.wrapper,
-            &snapshot.server,
-        ] {
+        for group in [&snapshot.game, &snapshot.wrapper, &snapshot.server] {
             for process in group.iter() {
                 if process.pid > 0 && !pids.contains(&process.pid) {
                     pids.push(process.pid);
@@ -223,12 +249,11 @@ impl InstallerCore {
         )
     }
 
-    /// 启动登录服务器、ProjectRebound 包装器、游戏和置顶守护。
-    pub fn launch(&self, target_win64: &Path, keep_topmost: bool, hotkey: &str) -> Result<String> {
+    /// 启动登录服务器、ProjectRebound 包装器和游戏。
+    pub fn launch(&self, target_win64: &Path) -> Result<String> {
         validate_win64_path(target_win64)?;
         let files = self.validate_launch_files(target_win64)?;
         let cleaned = clean_engine_ini(self.logger.clone())?;
-        let topmost = self.write_topmost_config(target_win64, keep_topmost, hotkey)?;
 
         self.log(format!("启动登录服务器：{}", files.node_exe.display()));
         hidden_command(&files.node_exe)
@@ -246,35 +271,13 @@ impl InstallerCore {
         thread::sleep(Duration::from_secs(2));
 
         self.log(format!("启动游戏：{}", files.game_exe.display()));
-        let game_process = Command::new(&files.game_exe)
+        Command::new(&files.game_exe)
             .current_dir(target_win64)
             .arg("-LogicServerURL=http://127.0.0.1:8000")
             .spawn()
             .context("启动游戏失败")?;
 
-        self.log("Rust 置顶守护：目标固定为游戏窗口。");
-        let mut watcher = hidden_command(env::current_exe()?);
-        watcher
-            .arg("--watch-pid")
-            .arg(game_process.id().to_string())
-            .arg("--hotkey")
-            .arg(topmost.hotkey.clone());
-        if topmost.keep_topmost {
-            watcher.arg("--keep-topmost");
-        }
-        watcher.spawn().context("启动置顶守护失败")?;
-
-        let mut notes = vec![
-            "启动完成。".to_string(),
-            format!("窗口置顶目标：{}", TOPMOST_GAME_LABEL),
-            if topmost.keep_topmost {
-                "持续置顶：默认已开启，按开关键可关闭或重新开启".to_string()
-            } else {
-                "持续置顶：默认已关闭，按开关键可开启或再次关闭".to_string()
-            },
-            format!("持续置顶开关键：{}", topmost.hotkey),
-            "原版批处理仍保留为 startgame.bat，未被修改参与该功能。".to_string(),
-        ];
+        let mut notes = vec!["启动完成。".to_string()];
         if let Some(path) = cleaned {
             notes.push(format!("并已清理冲突配置：{}", path.display()));
         }

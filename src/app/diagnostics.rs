@@ -3,10 +3,7 @@
 use crate::core::{self, PortConflict, RuntimeSnapshot, format_port_conflicts};
 
 pub(crate) fn runtime_snapshot_has_any(snapshot: &RuntimeSnapshot) -> bool {
-    !snapshot.game.is_empty()
-        || !snapshot.wrapper.is_empty()
-        || !snapshot.server.is_empty()
-        || !snapshot.watcher.is_empty()
+    !snapshot.game.is_empty() || !snapshot.wrapper.is_empty() || !snapshot.server.is_empty()
 }
 
 pub(crate) fn format_process_detection_message(

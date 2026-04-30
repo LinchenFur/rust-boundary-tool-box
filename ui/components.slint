@@ -261,6 +261,165 @@ export component InputBox inherits Rectangle {
     @children
 }
 
+// 自绘单行输入框，避免系统原生输入框和深色界面风格不一致。
+export component TextField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder: "";
+    in property <bool> enabled: true;
+    in property <InputType> input-type: InputType.text;
+    callback accepted;
+    callback edited(text: string);
+
+    height: 46px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: enabled ? (input.has-focus ? #62e2c1 : #344056) : #273041;
+    background: enabled ? #0f131a : #0f131a88;
+
+    animate border-color { duration: 120ms; }
+    animate background { duration: 120ms; }
+
+    if text == "" && !input.has-focus : Txt {
+        x: 14px;
+        y: 0px;
+        width: parent.width - 28px;
+        height: parent.height;
+        text: placeholder;
+        color: #77849a;
+        font-size: 13px;
+        font-weight: 500;
+        vertical-alignment: center;
+        wrap: no-wrap;
+    }
+
+    input := TextInput {
+        x: 14px;
+        y: 0px;
+        width: parent.width - 28px;
+        height: parent.height;
+        text <=> root.text;
+        enabled: root.enabled;
+        input-type: root.input-type;
+        color: root.enabled ? #eef4fb : #687589;
+        selection-background-color: #62e2c1;
+        selection-foreground-color: #08231d;
+        font-family: "Microsoft YaHei UI";
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 0px;
+        vertical-alignment: center;
+        accepted => { root.accepted(); }
+        edited => { root.edited(root.text); }
+    }
+}
+
+// VNT 服务器地址下拉框，使用自绘列表保持和主界面一致。
+export component ServerDropdown inherits Rectangle {
+    in-out property <string> value;
+    in property <[string]> options;
+    in property <bool> enabled: true;
+    in-out property <bool> expanded: false;
+    callback selected(value: string);
+
+    height: 46px;
+    background: #00000000;
+
+    closed := Rectangle {
+        width: parent.width;
+        height: 46px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: enabled ? (touch.has-hover ? #62e2c1 : #344056) : #273041;
+        background: enabled ? (touch.has-hover ? #151c27 : #0f131a) : #0f131a88;
+
+        animate background { duration: 120ms; }
+        animate border-color { duration: 120ms; }
+
+        Txt {
+            x: 14px;
+            y: 0px;
+            width: parent.width - 54px;
+            height: parent.height;
+            text: value == "" ? "选择服务器地址" : value;
+            color: value == "" ? #77849a : #eef4fb;
+            font-size: 14px;
+            font-weight: 600;
+            vertical-alignment: center;
+            wrap: no-wrap;
+        }
+
+        Txt {
+            x: parent.width - 40px;
+            y: 0px;
+            width: 26px;
+            height: parent.height;
+            text: "▼";
+            color: enabled ? #95a3b8 : #54617a;
+            font-size: 10px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        touch := TouchArea {
+            enabled: root.enabled;
+            clicked => {
+                root.expanded = true;
+                popup.show();
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: 50px;
+        width: root.width;
+        height: 8px + 40px * root.options.length;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: #344056;
+            background: #101721;
+            clip: true;
+
+            for option[index] in root.options : Rectangle {
+                x: 4px;
+                y: 4px + 40px * index;
+                width: parent.width - 8px;
+                height: 36px;
+                border-radius: 11px;
+                background: option == root.value ? #103b34 : (item-touch.has-hover ? #1d2531 : #00000000);
+
+                Txt {
+                    x: 12px;
+                    y: 0px;
+                    width: parent.width - 24px;
+                    height: parent.height;
+                    text: option;
+                    color: option == root.value ? #c7fff2 : #dbeafe;
+                    font-size: 13px;
+                    font-weight: option == root.value ? 800 : 600;
+                    vertical-alignment: center;
+                    wrap: no-wrap;
+                }
+
+                item-touch := TouchArea {
+                    clicked => {
+                        root.value = option;
+                        root.expanded = false;
+                        root.selected(option);
+                        popup.close();
+                    }
+                }
+            }
+        }
+    }
+}
+
 // 带强调条的设置/状态行。
 export component DetailRow inherits Rectangle {
     in property <string> label;
@@ -317,96 +476,28 @@ export component DetailRow inherits Rectangle {
     }
 }
 
-// 游戏窗口置顶设置的开关。
-export component TopSwitch inherits Rectangle {
-    in property <bool> checked: false;
-    callback toggled(value: bool);
-
-    height: 54px;
-    border-radius: 14px;
-    border-width: 1px;
-    border-color: checked ? #9ef0b5 : #344056;
-    background: checked ? #0d2d1a : #0f131a;
-
-    HorizontalLayout {
-        padding-left: 9px;
-        padding-right: 14px;
-        spacing: 12px;
-
-        Rectangle {
-            width: 42px;
-            background: #00000000;
-
-            Rectangle {
-                width: 36px;
-                height: 36px;
-                x: 0px;
-                y: (parent.height - self.height) / 2;
-                border-radius: 10px;
-                background: checked ? #9ef0b5 : #8a96a8;
-            }
-        }
-
-        Txt {
-            text: checked ? "窗口保持置顶" : "窗口不置顶";
-            color: #eef4fb;
-            font-size: 14px;
-            font-weight: 700;
-            horizontal-stretch: 1;
-            vertical-alignment: center;
-        }
-    }
-
-    TouchArea {
-        clicked => { parent.toggled(!parent.checked); }
-    }
-}
-
-// 供 VNT 页面使用的通用双状态选项行。
+// 供 VNT 页面使用的紧凑双状态选项。
 export component OptionSwitch inherits Rectangle {
     in property <bool> checked: false;
+    in property <bool> enabled: true;
     in property <string> on-label;
     in property <string> off-label;
     in property <string> sub;
     callback toggled(value: bool);
 
-    height: 54px;
+    height: 48px;
     border-radius: 14px;
     border-width: 1px;
-    border-color: checked ? #9ef0b5 : #344056;
-    background: checked ? #0d2d1a : #0f131a;
+    border-color: enabled ? (checked ? #62e2c1 : (touch.has-hover ? #54617a : #344056)) : #273041;
+    background: enabled ? (checked ? #10241f : (touch.has-hover ? #151c27 : #0f131a)) : #0f131a88;
 
     animate background { duration: 140ms; }
     animate border-color { duration: 140ms; }
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 14px;
+        padding-left: 14px;
+        padding-right: 12px;
         spacing: 12px;
-
-        Rectangle {
-            width: 38px;
-            background: #00000000;
-
-            Rectangle {
-                width: 38px;
-                height: 22px;
-                y: (parent.height - self.height) / 2;
-                border-radius: 11px;
-                background: checked ? #9ef0b5 : #344056;
-
-                Rectangle {
-                    width: 16px;
-                    height: 16px;
-                    x: checked ? 19px : 3px;
-                    y: 3px;
-                    border-radius: 8px;
-                    background: checked ? #0b2a18 : #c7d1df;
-
-                    animate x { duration: 120ms; }
-                }
-            }
-        }
 
         VerticalLayout {
             alignment: center;
@@ -415,23 +506,57 @@ export component OptionSwitch inherits Rectangle {
 
             Txt {
                 text: checked ? on-label : off-label;
-                color: #eef4fb;
+                color: enabled ? (checked ? #c7fff2 : #eef4fb) : #687589;
                 font-size: 14px;
-                font-weight: 700;
+                font-weight: 800;
                 horizontal-stretch: 1;
+                wrap: no-wrap;
             }
 
             Txt {
                 text: sub;
-                color: #95a3b8;
-                font-size: 11px;
-                font-weight: 500;
+                color: enabled ? (checked ? #8ddfc8 : #8793a6) : #54617a;
+                font-size: 10px;
+                font-weight: 600;
                 horizontal-stretch: 1;
+                wrap: no-wrap;
+            }
+        }
+
+        Rectangle {
+            width: 44px;
+            background: #00000000;
+
+            Rectangle {
+                width: 42px;
+                height: 22px;
+                x: 1px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 11px;
+                border-width: 1px;
+                border-color: enabled ? (checked ? #62e2c1 : #54617a) : #273041;
+                background: enabled ? (checked ? #62e2c1 : #263145) : #1a202b;
+
+                animate background { duration: 140ms; }
+                animate border-color { duration: 140ms; }
+
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    x: checked ? 22px : 3px;
+                    y: 2px;
+                    border-radius: 8px;
+                    background: enabled ? (checked ? #08231d : #c7d1df) : #657285;
+
+                    animate x { duration: 120ms; easing: ease-out; }
+                    animate background { duration: 120ms; }
+                }
             }
         }
     }
 
-    TouchArea {
-        clicked => { parent.toggled(!parent.checked); }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.toggled(!root.checked); }
     }
 }

@@ -16,7 +16,6 @@ pub fn summarize_runtime_processes(snapshot: &RuntimeSnapshot) -> String {
         ("游戏", &snapshot.game),
         ("服务包装器", &snapshot.wrapper),
         ("登录服务器", &snapshot.server),
-        ("置顶守护", &snapshot.watcher),
     ]
     .into_iter()
     .map(|(label, items)| {
@@ -73,12 +72,7 @@ fn shorten_runtime_detail(value: &str) -> String {
 /// 对多个运行时进程组中的 PID 去重。
 pub(crate) fn runtime_process_pids(snapshot: &RuntimeSnapshot) -> Vec<u32> {
     let mut pids = Vec::new();
-    for group in [
-        &snapshot.watcher,
-        &snapshot.game,
-        &snapshot.wrapper,
-        &snapshot.server,
-    ] {
+    for group in [&snapshot.game, &snapshot.wrapper, &snapshot.server] {
         for process in group.iter() {
             if process.pid > 0 && !pids.contains(&process.pid) {
                 pids.push(process.pid);
@@ -173,6 +167,7 @@ fn append_conflicts(
             pid: 0,
             name: "未知进程".to_string(),
             exe: "未知路径".to_string(),
+            expected: false,
         });
         return;
     }
@@ -190,6 +185,7 @@ fn append_conflicts(
                 .and_then(|process| process.exe())
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| "未知路径".to_string()),
+            expected: false,
         });
     }
 }

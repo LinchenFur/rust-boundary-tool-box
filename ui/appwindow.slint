@@ -2,7 +2,7 @@
 //
 // 具体视觉组件拆在 components.slint、rows.slint 和 models.slint 中。
 
-import { PortRow, DriveRow, ServerRow, VntPeerRow } from "models.slint";
+import { PortRow, DriveRow, ServerRow, VntPeerRow, VntServerRow } from "models.slint";
 import { StartPage } from "pages/start_page.slint";
 import { DirectoryPage } from "pages/directory_page.slint";
 import { DiagnosticsPage } from "pages/diagnostics_page.slint";
@@ -27,15 +27,12 @@ export component AppWindow inherits Window {
     in-out property <string> manual_path: "";
     in-out property <string> target_text: "未解析到有效的安装目录";
     in-out property <bool> auto_mode: true;
-    in-out property <bool> keep_topmost: true;
-    in-out property <string> hotkey_text: "Ctrl+Alt+F10";
     in-out property <string> status_text: "准备就绪";
     in-out property <string> process_status_text: "运行进程：未检测";
     in-out property <bool> show_logs: false;
     in-out property <string> log_text: "";
     in-out property <bool> busy: false;
     in-out property <bool> pulse: false;
-    in-out property <bool> hotkey_listening: false;
     in-out property <bool> show_drive_dialog: false;
     in-out property <bool> show_app_dialog: false;
     in-out property <bool> app_dialog_confirm: false;
@@ -54,6 +51,8 @@ export component AppWindow inherits Window {
 
     // 用于 VNT 联机的状态和选项。
     in-out property <string> vnt_server_text: "101.35.230.139:6660";
+    in-out property <string> vnt_new_server_text: "";
+    in-out property <[string]> vnt_server_options;
     in-out property <string> vnt_network_code: "";
     in-out property <string> vnt_password: "";
     in-out property <bool> vnt_no_tun: false;
@@ -67,6 +66,7 @@ export component AppWindow inherits Window {
     in-out property <string> vnt_server_status_text: "-";
     in-out property <string> vnt_nat_text: "-";
     in-out property <string> vnt_peer_summary_text: "0 个节点";
+    in-out property <[VntServerRow]> vnt_server_rows;
 
     // 列表模型由 Rust 持有并原地更新。
     in-out property <[PortRow]> port_rows;
@@ -82,11 +82,6 @@ export component AppWindow inherits Window {
     callback manual_mode_clicked();
     callback manual_path_changed(text: string);
 
-    // 设置回调。
-    callback keep_topmost_toggled(value: bool);
-    callback hotkey_text_changed(text: string);
-    callback hotkey_captured(text: string, control: bool, alt: bool, shift: bool, meta: bool);
-
     // 核心操作回调。
     callback install_clicked();
     callback uninstall_clicked();
@@ -101,6 +96,8 @@ export component AppWindow inherits Window {
     callback vnt_start_clicked();
     callback vnt_stop_clicked();
     callback vnt_refresh_clicked();
+    callback vnt_add_server_clicked(address: string);
+    callback vnt_settings_changed();
     callback toggle_logs_clicked();
 
     // 自定义弹窗回调。
@@ -179,6 +176,8 @@ export component AppWindow inherits Window {
             width: parent.width;
             height: parent.height;
             vnt_server_text <=> root.vnt_server_text;
+            vnt_new_server_text <=> root.vnt_new_server_text;
+            vnt_server_options: root.vnt_server_options;
             vnt_network_code <=> root.vnt_network_code;
             vnt_password <=> root.vnt_password;
             vnt_no_tun <=> root.vnt_no_tun;
@@ -192,26 +191,24 @@ export component AppWindow inherits Window {
             vnt_server_status_text: root.vnt_server_status_text;
             vnt_nat_text: root.vnt_nat_text;
             vnt_peer_summary_text: root.vnt_peer_summary_text;
+            vnt_server_rows: root.vnt_server_rows;
             vnt_peer_rows: root.vnt_peer_rows;
             vnt_start_clicked => { root.vnt_start_clicked(); }
             vnt_stop_clicked => { root.vnt_stop_clicked(); }
             vnt_refresh_clicked => { root.vnt_refresh_clicked(); }
+            vnt_add_server_clicked(address) => { root.vnt_add_server_clicked(address); }
+            vnt_settings_changed => { root.vnt_settings_changed(); }
         }
 
         if page == 3 : SettingsPage {
             width: parent.width;
             height: parent.height;
-            hotkey_listening <=> root.hotkey_listening;
-            keep_topmost: root.keep_topmost;
             busy: root.busy;
             has_target: root.has_target;
-            hotkey_text: root.hotkey_text;
             status_text: root.status_text;
             target_text: root.target_text;
             process_status_text: root.process_status_text;
             server_status_text: root.server_status_text;
-            keep_topmost_toggled(value) => { root.keep_topmost_toggled(value); }
-            hotkey_captured(text, control, alt, shift, meta) => { root.hotkey_captured(text, control, alt, shift, meta); }
             open_logs_clicked => { root.open_logs_clicked(); }
         }
 

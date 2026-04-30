@@ -12,17 +12,11 @@ impl AppController {
                 return;
             }
         };
-        let keep_topmost = self.ui.get_keep_topmost();
-        let hotkey = self.ui.get_hotkey_text().to_string();
-        if let Err(error) = core::normalize_hotkey(&hotkey) {
-            self.show_error_dialog("安装", &error.to_string());
-            return;
-        }
         self.ui.set_busy(true);
         self.ui.set_status_text("安装中...".into());
         let core = self.core.clone();
         let tx = self.tx.clone();
-        thread::spawn(move || match core.install(&target, keep_topmost, &hotkey) {
+        thread::spawn(move || match core.install(&target) {
             Ok(dialog) => {
                 let _ = tx.send(AppMessage::ActionFinished {
                     title: "安装".to_string(),
@@ -30,7 +24,6 @@ impl AppController {
                     dialog,
                     process_status: None,
                     target: Some(target),
-                    load_topmost: true,
                 });
             }
             Err(error) => {
@@ -64,7 +57,6 @@ impl AppController {
                     dialog,
                     process_status: Some("运行进程：未检测".to_string()),
                     target: Some(target),
-                    load_topmost: false,
                 });
             }
             Err(error) => {
@@ -86,12 +78,6 @@ impl AppController {
                 return;
             }
         };
-        let keep_topmost = self.ui.get_keep_topmost();
-        let hotkey = self.ui.get_hotkey_text().to_string();
-        if let Err(error) = core::normalize_hotkey(&hotkey) {
-            self.show_error_dialog("启动游戏", &error.to_string());
-            return;
-        }
         let conflicts = match self.core.collect_port_conflicts() {
             Ok(conflicts) => conflicts,
             Err(error) => {
@@ -108,24 +94,17 @@ impl AppController {
                 ),
                 "关闭并启动",
                 "取消",
-                PendingDialogAction::LaunchWithConflicts {
-                    target,
-                    keep_topmost,
-                    hotkey,
-                    conflicts,
-                },
+                PendingDialogAction::LaunchWithConflicts { target, conflicts },
             );
             return;
         }
-        self.start_launch_with_conflicts(target, keep_topmost, hotkey, conflicts);
+        self.start_launch_with_conflicts(target, conflicts);
     }
 
     /// 可选关闭已知端口冲突进程后启动游戏。
     pub(super) fn start_launch_with_conflicts(
         &mut self,
         target: PathBuf,
-        keep_topmost: bool,
-        hotkey: String,
         conflicts: Vec<PortConflict>,
     ) {
         self.ui.set_busy(true);
@@ -145,7 +124,7 @@ impl AppController {
                         );
                     }
                 }
-                core.launch(&target, keep_topmost, &hotkey)
+                core.launch(&target)
             })();
 
             match result {
@@ -156,7 +135,6 @@ impl AppController {
                         dialog,
                         process_status: None,
                         target: Some(target),
-                        load_topmost: true,
                     });
                 }
                 Err(error) => {
@@ -207,7 +185,6 @@ impl AppController {
                         dialog: message,
                         process_status: Some(process_status),
                         target: Some(target),
-                        load_topmost: false,
                     });
                 }
                 Err(error) => {
@@ -234,6 +211,7 @@ impl AppController {
             .set_status_text(format!("关闭 {}/{} PID {} 中...", protocol, port, pid).into());
         let core = self.core.clone();
         let tx = self.tx.clone();
+        let target = self.current_target.clone();
         thread::spawn(move || {
             let result = (|| -> Result<(String, String, Vec<CorePortStatusRow>)> {
                 let current = core.collect_port_conflicts()?;
@@ -263,7 +241,7 @@ impl AppController {
                         && i32::from(item.port) == port
                         && i32::try_from(item.pid).ok() == Some(pid)
                 });
-                let rows = core.port_status_rows()?;
+                let rows = core.port_status_rows_for_target(target.as_deref())?;
                 let status = if still_exists {
                     format!("{}/{} PID {} 仍在占用", protocol, port, pid)
                 } else {
@@ -286,7 +264,6 @@ impl AppController {
                         dialog,
                         process_status: Some(process_status),
                         target: None,
-                        load_topmost: false,
                     });
                 }
                 Err(error) => {
@@ -358,7 +335,6 @@ impl AppController {
                         dialog,
                         process_status: Some(process_status),
                         target: Some(target),
-                        load_topmost: false,
                     });
                 }
                 Err(error) => {

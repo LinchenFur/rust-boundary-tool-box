@@ -21,15 +21,6 @@ pub const INSTALLER_FOLDER_NAME: &str = "installer_tool";
 pub const METADATA_DIR_NAME: &str = ".pve_installer";
 pub const STATE_FILE_NAME: &str = "state.json";
 pub const MARKERS_FILE_NAME: &str = "markers.json";
-pub const TOPMOST_MODE_FILE_NAME: &str = "topmost_mode.txt";
-pub const TOPMOST_KEEP_FILE_NAME: &str = "topmost_keep.txt";
-pub const TOPMOST_HOTKEY_FILE_NAME: &str = "topmost_hotkey.txt";
-pub const DEFAULT_TOPMOST_MODE: &str = "game";
-pub const DEFAULT_KEEP_TOPMOST: bool = true;
-pub const DEFAULT_TOPMOST_HOTKEY: &str = "Ctrl+Alt+F10";
-pub const TOPMOST_GAME_LABEL: &str = "Boundary Game 游戏窗口";
-pub const TOPMOST_WATCH_START_TIMEOUT_SECONDS: u64 = 180;
-pub const TOPMOST_WATCH_LOST_TIMEOUT_SECONDS: u64 = 15;
 /// 在 Windows 上隐藏辅助进程窗口所用的 CREATE_NO_WINDOW 标志。
 pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// 用于两个 ProjectRebound 运行时二进制的 Nightly 包地址。
@@ -153,14 +144,6 @@ pub struct ManagedRecord {
     pub dir_count: Option<u64>,
 }
 
-/// 与安装状态一起持久化的窗口置顶配置。
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TopmostConfig {
-    pub mode: String,
-    pub keep_topmost: bool,
-    pub hotkey: String,
-}
-
 /// 完整安装元数据，也是完整卸载的权威来源。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct InstallState {
@@ -172,8 +155,6 @@ pub struct InstallState {
     pub installed_at: String,
     pub updated_at: String,
     pub managed_items: Vec<ManagedRecord>,
-    #[serde(default)]
-    pub topmost_config: TopmostConfig,
 }
 
 /// 当 state.json 不可用时使用的最小兜底元数据。
@@ -201,7 +182,6 @@ pub struct RuntimeSnapshot {
     pub game: Vec<RuntimeProcess>,
     pub wrapper: Vec<RuntimeProcess>,
     pub server: Vec<RuntimeProcess>,
-    pub watcher: Vec<RuntimeProcess>,
 }
 
 /// 绑定了必要本地端口的进程。
@@ -212,6 +192,9 @@ pub struct PortConflict {
     pub pid: u32,
     pub name: String,
     pub exe: String,
+    /// 该端口占用是否来自当前目标目录下的预期游戏/服务进程。
+    #[serde(default)]
+    pub expected: bool,
 }
 
 /// 单个监控端口的 UI 友好状态。
@@ -244,9 +227,6 @@ struct MetadataPaths {
     metadata_dir: PathBuf,
     state_file: PathBuf,
     markers_file: PathBuf,
-    topmost_mode_file: PathBuf,
-    topmost_keep_file: PathBuf,
-    topmost_hotkey_file: PathBuf,
     backups_root: PathBuf,
 }
 
@@ -270,8 +250,7 @@ pub(crate) mod pathing;
 pub(crate) mod payload;
 pub(crate) mod process;
 pub(crate) mod runtime_ops;
-pub(crate) mod settings;
 pub(crate) mod util;
 
 pub use process::{format_port_conflicts, summarize_runtime_processes};
-pub use util::{normalize_hotkey, now_text, watch_mode_from_args};
+pub use util::now_text;
