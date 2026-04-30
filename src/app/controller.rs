@@ -115,6 +115,8 @@ impl AppController {
         ui.set_has_target(false);
         ui.set_servers_loading(false);
         ui.set_server_status_text("服务器列表：未刷新".into());
+        ui.set_update_checking(false);
+        ui.set_update_status_text("更新：未检查".into());
         ui.set_show_drive_dialog(false);
         ui.set_show_app_dialog(false);
         ui.set_app_dialog_confirm(false);
@@ -258,6 +260,12 @@ impl AppController {
         }
         {
             let controller = Rc::clone(controller);
+            ui.unwrap().on_check_updates_clicked(move || {
+                controller.borrow_mut().start_update_check(false);
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
             ui.unwrap().on_refresh_servers_clicked(move || {
                 controller.borrow_mut().start_refresh_servers();
             });
@@ -361,6 +369,7 @@ impl AppController {
     pub(super) fn initialize(&mut self) {
         self.refresh_target_from_mode(true);
         self.start_refresh_servers();
+        self.start_update_check(true);
     }
 
     /// 在 UI 退出前停止后台会话。

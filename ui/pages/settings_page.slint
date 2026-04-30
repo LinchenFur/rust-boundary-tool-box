@@ -7,7 +7,10 @@ export component SettingsPage inherits Rectangle {
     in property <string> target_text;
     in property <string> process_status_text;
     in property <string> server_status_text;
+    in property <bool> update_checking;
+    in property <string> update_status_text;
     callback open_logs_clicked();
+    callback check_updates_clicked();
 
     // 页面 3：工具状态和日志入口。
     HorizontalLayout {
@@ -27,6 +30,14 @@ export component SettingsPage inherits Rectangle {
                 TitleBlock {
                     title: "设置";
                     sub: "工具运行记录与当前状态";
+                }
+
+                Action {
+                    label: update_checking ? "检查中" : "检查更新";
+                    sub: update_status_text;
+                    enabled: !busy && !update_checking;
+                    accent: #62e2c1;
+                    clicked => { root.check_updates_clicked(); }
                 }
 
                 Action {
@@ -69,6 +80,12 @@ export component SettingsPage inherits Rectangle {
                     label: "进程状态";
                     value: process_status_text;
                     accent: #d7c4ff;
+                }
+
+                DetailRow {
+                    label: "更新状态";
+                    value: update_status_text;
+                    accent: update_checking ? #f6c76d : #62e2c1;
                 }
 
                 DetailRow {

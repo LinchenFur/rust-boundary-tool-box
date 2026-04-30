@@ -47,6 +47,35 @@ impl AppController {
                         error
                     ));
                 }
+                AppMessage::UpdateCheckFinished { result, automatic } => {
+                    self.ui.set_update_checking(false);
+                    self.ui
+                        .set_update_status_text(update_status_text(&result).into());
+                    self.append_log(&format!(
+                        "[{}] 更新检查完成：当前 v{}，最新 {}",
+                        core::now_text(),
+                        APP_VERSION,
+                        result.latest_tag
+                    ));
+                    let title = if automatic {
+                        "自动检查更新"
+                    } else {
+                        "检查更新"
+                    };
+                    self.show_info_dialog(title, &update_dialog_text(&result));
+                }
+                AppMessage::UpdateCheckFailed { error, automatic } => {
+                    self.ui.set_update_checking(false);
+                    self.ui
+                        .set_update_status_text(format!("更新：检查失败：{error}").into());
+                    self.append_log(&format!("[{}] 更新检查失败：{}", core::now_text(), error));
+                    let title = if automatic {
+                        "自动检查更新"
+                    } else {
+                        "检查更新"
+                    };
+                    self.show_error_dialog(title, &error);
+                }
                 AppMessage::VntEvent(event) => self.apply_vnt_event(event),
                 AppMessage::ActionFinished {
                     title,

@@ -48,6 +48,8 @@ export component AppWindow inherits Window {
     // 远程社区服列表状态。
     in-out property <bool> servers_loading: false;
     in-out property <string> server_status_text: "服务器列表：未刷新";
+    in-out property <bool> update_checking: false;
+    in-out property <string> update_status_text: "更新：未检查";
 
     // 用于 VNT 联机的状态和选项。
     in-out property <string> vnt_server_text: "101.35.230.139:6660";
@@ -92,6 +94,7 @@ export component AppWindow inherits Window {
     callback open_logs_clicked();
 
     // 远程服务器和 VNT 回调。
+    callback check_updates_clicked();
     callback refresh_servers_clicked();
     callback vnt_start_clicked();
     callback vnt_stop_clicked();
@@ -209,7 +212,10 @@ export component AppWindow inherits Window {
             target_text: root.target_text;
             process_status_text: root.process_status_text;
             server_status_text: root.server_status_text;
+            update_checking: root.update_checking;
+            update_status_text: root.update_status_text;
             open_logs_clicked => { root.open_logs_clicked(); }
+            check_updates_clicked => { root.check_updates_clicked(); }
         }
 
         if page == 4 : ServersPage {

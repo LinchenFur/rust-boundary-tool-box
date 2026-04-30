@@ -35,6 +35,8 @@ mod prefs;
 mod server_list;
 mod servers;
 mod target;
+mod update;
+mod updates;
 mod vnt_controller;
 mod vnt_rows;
 
@@ -42,6 +44,7 @@ use background::spawn_port_thread;
 use diagnostics::{format_process_detection_message, runtime_snapshot_has_any};
 use prefs::{AppPrefs, VntPrefs};
 use server_list::{RemoteServer, fetch_servers, server_placeholder_row, server_to_row};
+use update::{UpdateCheckResult, check_latest_release, update_dialog_text, update_status_text};
 use vnt_rows::{
     apply_vnt_idle_to_ui, vnt_peer_to_row, vnt_placeholder_rows, vnt_server_placeholder_rows,
     vnt_server_to_row,
@@ -68,6 +71,14 @@ enum AppMessage {
     PortRows(Vec<CorePortStatusRow>),
     ServerRows(Vec<RemoteServer>),
     ServerRowsFailed(String),
+    UpdateCheckFinished {
+        result: UpdateCheckResult,
+        automatic: bool,
+    },
+    UpdateCheckFailed {
+        error: String,
+        automatic: bool,
+    },
     VntEvent(VntEvent),
     ActionFinished {
         title: String,
