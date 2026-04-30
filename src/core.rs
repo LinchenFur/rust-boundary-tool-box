@@ -10,7 +10,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 /// 显示在 UI 中并写入安装元数据的应用版本。
-pub const APP_VERSION: &str = "1.2.0";
+pub const APP_VERSION: &str = "1.2.1";
 /// 游戏 Boundary 的 Steam App ID。
 pub const APP_ID: &str = "1364020";
 /// 用于校验 Binaries\Win64 目录的游戏主程序。

@@ -4,6 +4,7 @@ import { Action, InfoBox, OptionSwitch, Panel, ServerDropdown, TextField, TitleB
 import { VntPeerLine, VntServerLine } from "../rows.slint";
 
 export component VntPage inherits Rectangle {
+    private property <bool> page_locked: true;
     in-out property <string> vnt_server_text;
     in-out property <string> vnt_new_server_text;
     in property <[string]> vnt_server_options;
@@ -395,6 +396,39 @@ export component VntPage inherits Rectangle {
                     }
                 }
             }
+        }
+    }
+
+    if page_locked : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #0b0e13b8;
+
+        Rectangle {
+            width: min(parent.width - 96px, 560px);
+            height: 170px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 28px;
+            border-width: 1px;
+            border-color: #62e2c155;
+            background: #101721aa;
+
+            Txt {
+                width: parent.width;
+                height: parent.height;
+                text: "暂未开放";
+                color: #eef4fbc8;
+                font-size: 54px;
+                font-weight: 900;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        blocker := TouchArea {
+            width: parent.width;
+            height: parent.height;
         }
     }
 }
