@@ -90,7 +90,8 @@ export component AppWindow inherits Window {
     // 核心操作回调。
     callback install_clicked();
     callback uninstall_clicked();
-    callback launch_clicked();
+    callback launch_pvp_clicked();
+    callback launch_pve_clicked();
     callback detect_processes_clicked();
     callback stop_processes_clicked();
     callback stop_port_process_clicked(protocol: string, port: int, pid: int);
@@ -208,7 +209,8 @@ export component AppWindow inherits Window {
                 status_text: root.status_text;
                 target_text: root.target_text;
                 detected_text: root.detected_text;
-                launch_clicked => { root.launch_clicked(); }
+                launch_pvp_clicked => { root.launch_pvp_clicked(); }
+                launch_pve_clicked => { root.launch_pve_clicked(); }
                 install_clicked => { root.install_clicked(); }
                 uninstall_clicked => { root.uninstall_clicked(); }
                 scan_clicked => { root.scan_clicked(); }

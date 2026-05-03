@@ -10,7 +10,8 @@ export component StartPage inherits Rectangle {
     in property <string> status_text;
     in property <string> target_text;
     in property <string> detected_text;
-    callback launch_clicked();
+    callback launch_pvp_clicked();
+    callback launch_pve_clicked();
     callback install_clicked();
     callback uninstall_clicked();
     callback scan_clicked();
@@ -33,17 +34,25 @@ export component StartPage inherits Rectangle {
                     spacing: 20px;
 
                     TitleBlock {
-                        title: "启动";
-                        sub: has_target ? "目录已准备，可以直接启动游戏" : "先完成目录识别后再启动";
+                        title: "启动模式";
+                        sub: has_target ? "选择 PVP 或 PVE 启动流程" : "先完成目录识别后再启动";
                     }
 
                     Action {
-                        label: "启动游戏";
-                        sub: has_target ? "使用当前目标目录启动 Boundary" : "等待有效游戏根目录";
+                        label: "启动 PVE";
+                        sub: has_target ? "登录服 -> 包装器 -> 游戏" : "等待有效游戏根目录";
                         primary: true;
                         enabled: has_target && !busy;
                         accent: #62e2c1;
-                        clicked => { root.launch_clicked(); }
+                        clicked => { root.launch_pve_clicked(); }
+                    }
+
+                    Action {
+                        label: "启动 PVP";
+                        sub: has_target ? "登录服 -> 游戏" : "等待有效游戏根目录";
+                        enabled: has_target && !busy;
+                        accent: #a8d8ff;
+                        clicked => { root.launch_pvp_clicked(); }
                     }
 
                     HorizontalLayout {

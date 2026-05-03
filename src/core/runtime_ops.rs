@@ -18,21 +18,33 @@ use super::util::hidden_command;
 use super::*;
 
 impl InstallerCore {
-    /// 解析启动所需全部文件，并集中报告缺失路径。
-    pub fn validate_launch_files(&self, target_win64: &Path) -> Result<LaunchFiles> {
+    /// 按启动模式解析所需文件，并集中报告缺失路径。
+    pub fn validate_launch_files(
+        &self,
+        target_win64: &Path,
+        mode: LaunchMode,
+    ) -> Result<LaunchFiles> {
         let files = launch_files(target_win64);
-        let missing: Vec<String> = [
-            &files.server_dir,
-            &files.node_exe,
-            &files.wrapper_exe,
-            &files.game_exe,
-        ]
-        .iter()
-        .filter(|path| !path.exists())
-        .map(|path| path.display().to_string())
-        .collect();
+        let required = match mode {
+            LaunchMode::Pvp => vec![&files.server_dir, &files.node_exe, &files.game_exe],
+            LaunchMode::Pve => vec![
+                &files.server_dir,
+                &files.node_exe,
+                &files.wrapper_exe,
+                &files.game_exe,
+            ],
+        };
+        let missing: Vec<String> = required
+            .into_iter()
+            .filter(|path| !path.exists())
+            .map(|path| path.display().to_string())
+            .collect();
         if !missing.is_empty() {
-            bail!("缺少启动所需文件：\n- {}", missing.join("\n- "));
+            bail!(
+                "缺少 {} 启动所需文件：\n- {}",
+                mode.display_name(),
+                missing.join("\n- ")
+            );
         }
         Ok(files)
     }
@@ -249,35 +261,74 @@ impl InstallerCore {
         )
     }
 
-    /// 启动登录服务器、ProjectRebound 包装器和游戏。
-    pub fn launch(&self, target_win64: &Path) -> Result<String> {
-        validate_win64_path(target_win64)?;
-        let files = self.validate_launch_files(target_win64)?;
-        let cleaned = clean_engine_ini(self.logger.clone())?;
+    /// 根据用户选择启动 PVP 或 PVE。
+    pub fn launch(&self, target_win64: &Path, mode: LaunchMode) -> Result<String> {
+        match mode {
+            LaunchMode::Pvp => self.launch_pvp(target_win64),
+            LaunchMode::Pve => self.launch_pve(target_win64),
+        }
+    }
 
+    /// 启动登录服务器。
+    fn launch_login_server(&self, files: &LaunchFiles) -> Result<()> {
         self.log(format!("启动登录服务器：{}", files.node_exe.display()));
         hidden_command(&files.node_exe)
             .current_dir(&files.server_dir)
             .arg("index.js")
             .spawn()
             .context("启动登录服务器失败")?;
+        Ok(())
+    }
+
+    /// 启动 PVP 流程：登录服务器和游戏，不启动 ProjectRebound 包装器。
+    fn launch_pvp(&self, target_win64: &Path) -> Result<String> {
+        validate_win64_path(target_win64)?;
+        let files = self.validate_launch_files(target_win64, LaunchMode::Pvp)?;
+        let cleaned = clean_engine_ini(self.logger.clone())?;
+
+        self.launch_login_server(&files)?;
+        thread::sleep(Duration::from_secs(5));
+        self.log(format!("启动 PVP 游戏：{}", files.game_exe.display()));
+        Command::new(&files.game_exe)
+            .current_dir(target_win64)
+            .arg(format!("-LogicServerURL={LOCAL_LOGIC_SERVER_URL}"))
+            .spawn()
+            .context("启动 PVP 游戏失败")?;
+
+        let mut notes = vec!["PVP 启动完成。".to_string()];
+        if let Some(path) = cleaned {
+            notes.push(format!("并已清理冲突配置：{}", path.display()));
+        }
+        Ok(notes.join("\n"))
+    }
+
+    /// 启动登录服务器、ProjectRebound 包装器和 PVE 游戏。
+    fn launch_pve(&self, target_win64: &Path) -> Result<String> {
+        validate_win64_path(target_win64)?;
+        let files = self.validate_launch_files(target_win64, LaunchMode::Pve)?;
+        let cleaned = clean_engine_ini(self.logger.clone())?;
+
+        self.launch_login_server(&files)?;
         thread::sleep(Duration::from_secs(5));
 
-        self.log(format!("启动服务包装器：{}", files.wrapper_exe.display()));
+        self.log(format!(
+            "启动 PVE 服务包装器：{}",
+            files.wrapper_exe.display()
+        ));
         hidden_command(&files.wrapper_exe)
             .current_dir(target_win64)
             .spawn()
-            .context("启动服务包装器失败")?;
+            .context("启动 PVE 服务包装器失败")?;
         thread::sleep(Duration::from_secs(2));
 
-        self.log(format!("启动游戏：{}", files.game_exe.display()));
+        self.log(format!("启动 PVE 游戏：{}", files.game_exe.display()));
         Command::new(&files.game_exe)
             .current_dir(target_win64)
-            .arg("-LogicServerURL=http://127.0.0.1:8000")
+            .arg(format!("-LogicServerURL={LOCAL_LOGIC_SERVER_URL}"))
             .spawn()
-            .context("启动游戏失败")?;
+            .context("启动 PVE 游戏失败")?;
 
-        let mut notes = vec!["启动完成。".to_string()];
+        let mut notes = vec!["PVE 启动完成。".to_string()];
         if let Some(path) = cleaned {
             notes.push(format!("并已清理冲突配置：{}", path.display()));
         }

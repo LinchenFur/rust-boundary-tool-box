@@ -78,20 +78,22 @@ impl AppController {
         match action {
             PendingDialogAction::None => self.hide_app_dialog(),
             PendingDialogAction::ManualPathInput => self.confirm_manual_path_from_dialog(),
-            PendingDialogAction::LaunchWithConflicts { target, conflicts } => {
+            PendingDialogAction::LaunchWithConflicts {
+                target,
+                mode,
+                conflicts,
+            } => {
                 self.hide_app_dialog();
-                self.start_launch_with_conflicts(target, conflicts);
+                self.start_launch_with_conflicts(target, mode, conflicts);
             }
         }
     }
 
     /// 处理弹窗取消动作，并应用取消侧的状态变化。
     pub(super) fn handle_dialog_secondary(&mut self) {
-        if matches!(
-            &self.pending_dialog_action,
-            PendingDialogAction::LaunchWithConflicts { .. }
-        ) {
-            self.ui.set_status_text("已取消启动".into());
+        if let PendingDialogAction::LaunchWithConflicts { mode, .. } = &self.pending_dialog_action {
+            self.ui
+                .set_status_text(format!("已取消 {} 启动", mode.display_name()).into());
         }
         self.hide_app_dialog();
     }

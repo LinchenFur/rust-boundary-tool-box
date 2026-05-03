@@ -32,6 +32,8 @@ pub const PROJECT_REBOUND_ONLINE_FILES: &[&str] =
 pub const REQUIRED_TCP_PORTS: &[u16] = &[6969, 7777, 8000, 9000];
 /// 本地游戏服务需要的 UDP 端口。
 pub const REQUIRED_UDP_PORTS: &[u16] = &[7777, 9000];
+/// 游戏连接本地登录服务器所用的启动参数值。
+pub const LOCAL_LOGIC_SERVER_URL: &str = "http://127.0.0.1:8000";
 /// 诊断页展示的端口行。
 pub const MONITORED_PORTS: &[(&str, u16)] = &[
     ("TCP", 6969),
@@ -212,6 +214,26 @@ pub struct LaunchFiles {
     pub node_exe: PathBuf,
     pub wrapper_exe: PathBuf,
     pub game_exe: PathBuf,
+}
+
+/// 用户选择的启动模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchMode {
+    Pvp,
+    Pve,
+}
+
+impl LaunchMode {
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Pvp => "PVP",
+            Self::Pve => "PVE",
+        }
+    }
+
+    pub fn uses_login_server(self) -> bool {
+        matches!(self, Self::Pvp | Self::Pve)
+    }
 }
 
 /// 在 UI 中选择的目录发现模式。

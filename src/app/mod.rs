@@ -19,7 +19,7 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::core::{
-    APP_VERSION, InstallerCore, MONITORED_PORTS, PathMode, PortConflict,
+    APP_VERSION, InstallerCore, LaunchMode, MONITORED_PORTS, PathMode, PortConflict,
     PortStatusRow as CorePortStatusRow, format_port_conflicts,
 };
 use crate::vnt_platform::{VntEvent, VntLaunchOptions, VntSession};
@@ -103,6 +103,7 @@ enum PendingDialogAction {
     None,
     LaunchWithConflicts {
         target: PathBuf,
+        mode: LaunchMode,
         conflicts: Vec<PortConflict>,
     },
     ManualPathInput,

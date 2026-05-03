@@ -69,46 +69,59 @@ impl AppController {
         });
     }
 
-    /// 执行启动前校验，并在关闭端口冲突进程前请求确认。
-    pub(super) fn start_launch(&mut self) {
+    /// 执行启动前校验，并在需要本地登录服务器时请求确认端口冲突处理。
+    pub(super) fn start_launch(&mut self, mode: LaunchMode) {
+        let title = format!("启动 {}", mode.display_name());
         let target = match self.require_target() {
             Ok(target) => target,
             Err(error) => {
-                self.show_error_dialog("启动游戏", &error.to_string());
+                self.show_error_dialog(&title, &error.to_string());
                 return;
             }
         };
-        let conflicts = match self.core.collect_port_conflicts() {
-            Ok(conflicts) => conflicts,
-            Err(error) => {
-                self.show_error_dialog("启动游戏", &error.to_string());
-                return;
+
+        let conflicts = if mode.uses_login_server() {
+            match self.core.collect_port_conflicts() {
+                Ok(conflicts) => conflicts,
+                Err(error) => {
+                    self.show_error_dialog(&title, &error.to_string());
+                    return;
+                }
             }
+        } else {
+            Vec::new()
         };
-        if !conflicts.is_empty() {
+        if mode.uses_login_server() && !conflicts.is_empty() {
             self.show_confirm_dialog(
-                "端口占用检测",
+                &format!("{} 端口占用检测", mode.display_name()),
                 &format!(
-                    "检测到启动所需端口已被占用：\n{}\n\n是否关闭这些占用端口的进程后继续启动？",
+                    "检测到 {} 启动所需端口已被占用：\n{}\n\n是否关闭这些占用端口的进程后继续启动？",
+                    mode.display_name(),
                     format_port_conflicts(&conflicts)
                 ),
-                "关闭并启动",
+                &format!("关闭并启动 {}", mode.display_name()),
                 "取消",
-                PendingDialogAction::LaunchWithConflicts { target, conflicts },
+                PendingDialogAction::LaunchWithConflicts {
+                    target,
+                    mode,
+                    conflicts,
+                },
             );
             return;
         }
-        self.start_launch_with_conflicts(target, conflicts);
+        self.start_launch_with_conflicts(target, mode, conflicts);
     }
 
-    /// 可选关闭已知端口冲突进程后启动游戏。
+    /// 可选关闭已知端口冲突进程后启动指定模式。
     pub(super) fn start_launch_with_conflicts(
         &mut self,
         target: PathBuf,
+        mode: LaunchMode,
         conflicts: Vec<PortConflict>,
     ) {
         self.ui.set_busy(true);
-        self.ui.set_status_text("启动游戏中...".into());
+        self.ui
+            .set_status_text(format!("启动 {} 中...", mode.display_name()).into());
         let core = self.core.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
@@ -124,13 +137,13 @@ impl AppController {
                         );
                     }
                 }
-                core.launch(&target)
+                core.launch(&target, mode)
             })();
 
             match result {
                 Ok(dialog) => {
                     let _ = tx.send(AppMessage::ActionFinished {
-                        title: "启动游戏".to_string(),
+                        title: format!("启动 {}", mode.display_name()),
                         status: "完成".to_string(),
                         dialog,
                         process_status: None,
@@ -139,7 +152,7 @@ impl AppController {
                 }
                 Err(error) => {
                     let _ = tx.send(AppMessage::ActionFailed {
-                        title: "启动游戏".to_string(),
+                        title: format!("启动 {}", mode.display_name()),
                         status: "执行失败".to_string(),
                         error: error.to_string(),
                     });

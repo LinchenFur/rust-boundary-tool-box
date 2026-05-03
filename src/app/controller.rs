@@ -225,8 +225,14 @@ impl AppController {
         }
         {
             let controller = Rc::clone(controller);
-            ui.unwrap().on_launch_clicked(move || {
-                controller.borrow_mut().start_launch();
+            ui.unwrap().on_launch_pvp_clicked(move || {
+                controller.borrow_mut().start_launch(LaunchMode::Pvp);
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_launch_pve_clicked(move || {
+                controller.borrow_mut().start_launch(LaunchMode::Pve);
             });
         }
         {
