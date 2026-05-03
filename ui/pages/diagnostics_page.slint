@@ -49,6 +49,14 @@ export component DiagnosticsPage inherits Rectangle {
                         clicked => { root.detect_processes_clicked(); }
                     }
 
+                    Action {
+                        label: "关闭相关进程";
+                        sub: "结束游戏/登录服/包装器";
+                        enabled: has_target && !busy;
+                        accent: #ffb4ab;
+                        clicked => { root.stop_processes_clicked(); }
+                    }
+
                     Rectangle {
                         vertical-stretch: 1;
                         background: #00000000;
