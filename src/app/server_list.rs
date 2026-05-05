@@ -108,43 +108,68 @@ fn decode_chunked_body(mut body: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// 将远程服务器 JSON 转换为紧凑 UI 行。
-pub(crate) fn server_to_row(server: RemoteServer) -> ServerRow {
-    let state = normalize_server_state(&server.server_state);
-    let active = state != "状态未知";
+pub(crate) fn server_to_row(server: RemoteServer, language: i32) -> ServerRow {
+    let state = normalize_server_state(&server.server_state, language);
+    let active = state != crate::app::i18n::tr(language, "状态未知", "Unknown", "状態不明");
     ServerRow {
         name: shorten_text(&server.name, 44).into(),
         address: format!("{}:{}", empty_as_dash(&server.ip), server.port).into(),
         meta: format!(
-            "{} / {} / {} / 更新时间 {}",
+            "{} / {} / {} / {} {}",
             empty_as_dash(&server.region),
             empty_as_dash(&server.mode),
             empty_as_dash(&server.map),
+            crate::app::i18n::tr(language, "更新时间", "Updated", "更新時刻"),
             format_heartbeat(server.last_heartbeat)
         )
         .into(),
         state: state.into(),
-        players: format!("{} 人", server.player_count).into(),
+        players: format!(
+            "{} {}",
+            server.player_count,
+            crate::app::i18n::tr(language, "人", "players", "人")
+        )
+        .into(),
         active,
     }
 }
 
 /// 加载中或错误后使用的占位行。
-pub(crate) fn server_placeholder_row(title: &str, detail: &str) -> ServerRow {
+pub(crate) fn server_placeholder_row(title: &str, detail: &str, language: i32) -> ServerRow {
     ServerRow {
         name: title.into(),
         address: detail.into(),
-        meta: "服务器列表".into(),
-        state: "WAIT".into(),
+        meta: crate::app::i18n::tr(language, "服务器列表", "Server list", "サーバー一覧").into(),
+        state: crate::app::i18n::tr(language, "等待", "Waiting", "待機").into(),
         players: "--".into(),
         active: false,
     }
 }
 
 /// 规范化空白或无效的服务器状态字符串。
-fn normalize_server_state(state: &str) -> String {
-    match state.trim() {
-        "" | "InvalidState" => "状态未知".to_string(),
-        value => value.to_string(),
+fn normalize_server_state(state: &str, language: i32) -> String {
+    let trimmed = state.trim();
+    let normalized = trimmed.to_ascii_lowercase();
+    match normalized.as_str() {
+        "" | "invalidstate" | "unknown" => {
+            crate::app::i18n::tr(language, "状态未知", "Unknown", "状態不明").to_string()
+        }
+        "wait" | "waiting" | "idle" | "ready" => {
+            crate::app::i18n::tr(language, "等待", "Waiting", "待機").to_string()
+        }
+        "online" | "active" | "running" => {
+            crate::app::i18n::tr(language, "在线", "Online", "オンライン").to_string()
+        }
+        "offline" | "stopped" | "closed" => {
+            crate::app::i18n::tr(language, "离线", "Offline", "オフライン").to_string()
+        }
+        "starting" | "loading" => {
+            crate::app::i18n::tr(language, "启动中", "Starting", "起動中").to_string()
+        }
+        "ingame" | "gaming" | "playing" | "in_game" | "in-game" => {
+            crate::app::i18n::tr(language, "游戏中", "In game", "ゲーム中").to_string()
+        }
+        _ => trimmed.to_string(),
     }
 }
 

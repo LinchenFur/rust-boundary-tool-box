@@ -1,4 +1,39 @@
-import { Action, DetailRow, Panel, TitleBlock } from "../components.slint";
+import { Action, DetailRow, Panel, TitleBlock, Txt } from "../components.slint";
+import { I18n } from "../i18n.slint";
+
+component LanguageChoice inherits Rectangle {
+    in property <int> code;
+    in property <int> language;
+    in property <image> flag;
+    in property <brush> accent: #62e2c1;
+    callback clicked();
+
+    property <bool> selected: language == code;
+    property <bool> enabled-state: language != code;
+
+    height: 58px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: selected ? accent : (touch.has-hover ? #54617a : #344056);
+    background: selected ? #10241f : (touch.has-hover ? #1d2531 : #0f131a);
+
+    animate background { duration: 140ms; }
+    animate border-color { duration: 140ms; }
+
+    Image {
+        width: min(parent.width - 18px, 58px);
+        height: 38px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: flag;
+        image-fit: contain;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled-state;
+        clicked => { root.clicked(); }
+    }
+}
 
 export component SettingsPage inherits Rectangle {
     in property <bool> busy;
@@ -9,8 +44,10 @@ export component SettingsPage inherits Rectangle {
     in property <string> server_status_text;
     in property <bool> update_checking;
     in property <string> update_status_text;
+    in property <int> language;
     callback open_logs_clicked();
     callback check_updates_clicked();
+    callback language_changed(language: int);
 
     // 页面 3：工具状态和日志入口。
     HorizontalLayout {
@@ -28,12 +65,14 @@ export component SettingsPage inherits Rectangle {
                 spacing: 16px;
 
                 TitleBlock {
-                    title: "设置";
-                    sub: "工具运行记录与当前状态";
+                    title: I18n.tr("设置", "Settings", "設定");
+                    sub: I18n.tr("工具运行记录与当前状态", "Logs, language, and current status", "ログ、言語、現在の状態");
                 }
 
                 Action {
-                    label: update_checking ? "检查中" : "检查更新";
+                    label: update_checking
+                        ? I18n.tr("检查中", "Checking", "確認中")
+                        : I18n.tr("检查更新", "Check Updates", "更新を確認");
                     sub: update_status_text;
                     enabled: !busy && !update_checking;
                     accent: #62e2c1;
@@ -41,11 +80,53 @@ export component SettingsPage inherits Rectangle {
                 }
 
                 Action {
-                    label: "打开日志目录";
-                    sub: "查看工具运行记录";
+                    label: I18n.tr("打开日志目录", "Open Log Folder", "ログフォルダーを開く");
+                    sub: I18n.tr("查看工具运行记录", "View toolbox runtime logs", "ツールの実行ログを表示");
                     enabled: !busy;
                     accent: #a8d8ff;
                     clicked => { root.open_logs_clicked(); }
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                    background: #00000000;
+                }
+
+                TitleBlock {
+                    title: I18n.tr("语言", "Language", "言語");
+                    sub: I18n.tr("选择界面显示语言", "Choose the interface language", "表示言語を選択");
+                }
+
+                HorizontalLayout {
+                    height: 58px;
+                    spacing: 12px;
+
+                    LanguageChoice {
+                        horizontal-stretch: 1;
+                        code: 0;
+                        language: root.language;
+                        flag: @image-url("../assets/flag-cn.svg");
+                        accent: #d7c4ff;
+                        clicked => { root.language_changed(0); }
+                    }
+
+                    LanguageChoice {
+                        horizontal-stretch: 1;
+                        code: 1;
+                        language: root.language;
+                        flag: @image-url("../assets/flag-us.svg");
+                        accent: #a8d8ff;
+                        clicked => { root.language_changed(1); }
+                    }
+
+                    LanguageChoice {
+                        horizontal-stretch: 1;
+                        code: 2;
+                        language: root.language;
+                        flag: @image-url("../assets/flag-jp.svg");
+                        accent: #9ef0b5;
+                        clicked => { root.language_changed(2); }
+                    }
                 }
             }
         }
@@ -60,36 +141,36 @@ export component SettingsPage inherits Rectangle {
                 spacing: 16px;
 
                 TitleBlock {
-                    title: "详细状态";
-                    sub: "当前目标、进程与服务状态";
+                    title: I18n.tr("详细状态", "Detailed Status", "詳細状態");
+                    sub: I18n.tr("当前目标、进程与服务状态", "Target, process, and service state", "対象、プロセス、サービス状態");
                 }
 
                 DetailRow {
-                    label: "操作状态";
+                    label: I18n.tr("操作状态", "Action Status", "操作状態");
                     value: status_text;
                     accent: busy ? #ffb4ab : #9ef0b5;
                 }
 
                 DetailRow {
-                    label: "目标目录";
-                    value: has_target ? target_text : "未锁定游戏根目录";
+                    label: I18n.tr("目标目录", "Target Path", "対象パス");
+                    value: has_target ? target_text : I18n.tr("未锁定游戏根目录", "Game root is not locked", "ゲームルート未設定");
                     accent: has_target ? #9ef0b5 : #f6c76d;
                 }
 
                 DetailRow {
-                    label: "进程状态";
+                    label: I18n.tr("进程状态", "Process Status", "プロセス状態");
                     value: process_status_text;
                     accent: #d7c4ff;
                 }
 
                 DetailRow {
-                    label: "更新状态";
+                    label: I18n.tr("更新状态", "Update Status", "更新状態");
                     value: update_status_text;
                     accent: update_checking ? #f6c76d : #62e2c1;
                 }
 
                 DetailRow {
-                    label: "服务器列表";
+                    label: I18n.tr("服务器列表", "Server List", "サーバー一覧");
                     value: server_status_text;
                     accent: #a8d8ff;
                 }

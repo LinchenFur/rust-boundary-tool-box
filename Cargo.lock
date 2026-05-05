@@ -695,13 +695,15 @@ dependencies = [
 
 [[package]]
 name = "boundary_toolbox"
-version = "1.2.3"
+version = "19.19.81-beta"
 dependencies = [
  "anyhow",
  "chrono",
  "crossbeam-channel",
  "embed-resource",
+ "icu_provider",
  "image",
+ "log",
  "netstat2",
  "regex",
  "reqwest",
@@ -2763,6 +2765,7 @@ checksum = "139c4cf31c8b5f33d7e199446eff9c1e02decfc2f0eec2c8d71f65befa45b421"
 dependencies = [
  "displaydoc",
  "icu_locale_core",
+ "log",
  "serde",
  "stable_deref_trait",
  "writeable",

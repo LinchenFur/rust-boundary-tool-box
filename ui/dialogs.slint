@@ -1,7 +1,8 @@
 import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
 import { DriveRow } from "models.slint";
-import { Action, InputBox, Panel, TitleBlock, Txt } from "components.slint";
+import { Action, InputBox, Panel, ProgressBox, TitleBlock, Txt } from "components.slint";
 import { DriveLine } from "rows.slint";
+import { I18n } from "i18n.slint";
 
 export component DriveScanDialog inherits Rectangle {
     in property <bool> busy;
@@ -26,8 +27,8 @@ export component DriveScanDialog inherits Rectangle {
                 spacing: 14px;
 
                 TitleBlock {
-                    title: "选择扫描盘符";
-                    sub: "只扫描勾选的磁盘";
+                    title: I18n.tr("选择扫描盘符", "Select Drives to Scan", "スキャンするドライブを選択");
+                    sub: I18n.tr("只扫描勾选的磁盘", "Only selected drives will be scanned", "選択したドライブのみスキャンします");
                 }
 
                 Panel {
@@ -57,7 +58,7 @@ export component DriveScanDialog inherits Rectangle {
 
                     Action {
                         width: 132px;
-                        label: "取消";
+                        label: I18n.tr("取消", "Cancel", "キャンセル");
                         sub: "";
                         enabled: !busy;
                         accent: #ffb4ab;
@@ -66,7 +67,7 @@ export component DriveScanDialog inherits Rectangle {
 
                     Action {
                         width: 156px;
-                        label: "开始扫描";
+                        label: I18n.tr("开始扫描", "Start Scan", "スキャン開始");
                         sub: "";
                         enabled: !busy;
                         accent: #62e2c1;
@@ -125,7 +126,7 @@ export component AppDialog inherits Rectangle {
                     TitleBlock {
                         horizontal-stretch: 1;
                         title: app_dialog_title;
-                        sub: app_dialog_confirm ? "需要确认" : "";
+                        sub: app_dialog_confirm ? I18n.tr("需要确认", "Confirmation Required", "確認が必要です") : "";
                     }
                 }
 
@@ -140,7 +141,7 @@ export component AppDialog inherits Rectangle {
                         color: #dbeafe;
                         font-size: 14px;
                         font-weight: 500;
-                        wrap: word-wrap;
+                        wrap: char-wrap;
                     }
                 }
 
@@ -153,8 +154,8 @@ export component AppDialog inherits Rectangle {
                         width: parent.width - 28px;
                         height: parent.height - 16px;
                         text: app_dialog_input_text;
-                        placeholder-text: "游戏根目录";
-                        font-family: "Microsoft YaHei UI";
+                        placeholder-text: I18n.tr("游戏根目录", "Game root", "ゲームルート");
+                        font-family: "Maple Mono NF CN";
                         font-size: 14px;
                         edited(text) => { root.app_dialog_input_text = text; }
                     }
@@ -180,6 +181,63 @@ export component AppDialog inherits Rectangle {
                         sub: "";
                         accent: app_dialog_error ? #ffb4ab : #62e2c1;
                         clicked => { root.app_dialog_primary(); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component InstallProgressDialog inherits Rectangle {
+    in property <bool> busy;
+    in property <float> progress: 0.0;
+    in property <string> percent: "0%";
+    in property <string> title: "";
+    in property <string> detail: "";
+    callback close_clicked();
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #05070bd9;
+
+        Panel {
+            width: 560px;
+            height: 280px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            radius: 24px;
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+
+                TitleBlock {
+                    title: I18n.tr("安装进度", "Install Progress", "インストール進捗");
+                    sub: "";
+                }
+
+                ProgressBox {
+                    shown: true;
+                    progress: root.progress;
+                    percent: root.percent;
+                    title: root.title;
+                    detail: root.detail;
+                }
+
+                HorizontalLayout {
+                    height: 58px;
+                    spacing: 12px;
+
+                    Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+                    Action {
+                        width: 156px;
+                        label: busy ? I18n.tr("安装中", "Installing", "インストール中") : I18n.tr("完成", "Done", "完了");
+                        sub: "";
+                        enabled: !busy;
+                        accent: #62e2c1;
+                        clicked => { root.close_clicked(); }
                     }
                 }
             }

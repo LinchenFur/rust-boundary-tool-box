@@ -10,7 +10,10 @@ impl AppController {
         }
 
         self.ui.set_update_checking(true);
-        self.ui.set_update_status_text("更新：检查中...".into());
+        self.ui.set_update_status_text(
+            self.tr("更新：检查中...", "Update: checking...", "更新: 確認中...")
+                .into(),
+        );
         let tx = self.tx.clone();
         thread::spawn(move || match check_latest_release() {
             Ok(result) => {

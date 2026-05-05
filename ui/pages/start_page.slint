@@ -2,6 +2,7 @@ import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
 import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
 import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, Txt } from "../components.slint";
 import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+import { I18n } from "../i18n.slint";
 
 export component StartPage inherits Rectangle {
     in property <bool> has_target;
@@ -34,13 +35,15 @@ export component StartPage inherits Rectangle {
                     spacing: 20px;
 
                     TitleBlock {
-                        title: "启动模式";
-                        sub: has_target ? "选择 PVP 或 PVE 启动流程" : "先完成目录识别后再启动";
+                        title: I18n.tr("启动模式", "Launch Mode", "起動モード");
+                        sub: has_target
+                            ? I18n.tr("选择 PVP 或 PVE 启动流程", "Choose the PVP or PVE launch flow", "PVP または PVE の起動フローを選択")
+                            : I18n.tr("先完成目录识别后再启动", "Resolve the game path before launching", "起動前にゲームパスを設定してください");
                     }
 
                     Action {
-                        label: "启动 PVE";
-                        sub: has_target ? "登录服 -> 包装器 -> 游戏" : "等待有效游戏根目录";
+                        label: I18n.tr("启动 PVE", "Launch PVE", "PVE を起動");
+                        sub: "";
                         primary: true;
                         enabled: has_target && !busy;
                         accent: #62e2c1;
@@ -48,8 +51,8 @@ export component StartPage inherits Rectangle {
                     }
 
                     Action {
-                        label: "启动 PVP";
-                        sub: has_target ? "登录服 -> 游戏" : "等待有效游戏根目录";
+                        label: I18n.tr("启动 PVP", "Launch PVP", "PVP を起動");
+                        sub: "";
                         enabled: has_target && !busy;
                         accent: #a8d8ff;
                         clicked => { root.launch_pvp_clicked(); }
@@ -60,8 +63,8 @@ export component StartPage inherits Rectangle {
 
                         Action {
                             horizontal-stretch: 1;
-                            label: "安装";
-                            sub: "写入社区服文件";
+                            label: I18n.tr("安装", "Install", "インストール");
+                            sub: I18n.tr("写入社区服文件", "Write community server files", "コミュニティサーバーファイルを書き込み");
                             enabled: has_target && !busy;
                             accent: #9ef0b5;
                             clicked => { root.install_clicked(); }
@@ -69,8 +72,8 @@ export component StartPage inherits Rectangle {
 
                         Action {
                             horizontal-stretch: 1;
-                            label: "卸载";
-                            sub: "移除已安装文件";
+                            label: I18n.tr("卸载", "Uninstall", "アンインストール");
+                            sub: I18n.tr("移除已安装文件", "Remove installed files", "インストール済みファイルを削除");
                             enabled: has_target && !busy;
                             accent: #ffb4ab;
                             clicked => { root.uninstall_clicked(); }
@@ -79,7 +82,7 @@ export component StartPage inherits Rectangle {
 
                     InfoBox {
                         box-height: 96px;
-                        label: "TASK";
+                        label: I18n.tr("任务", "TASK", "タスク");
                         value: status_text;
                         accent: busy ? #ffb4ab : #9ef0b5;
                     }
@@ -96,20 +99,22 @@ export component StartPage inherits Rectangle {
                     spacing: 16px;
 
                     TitleBlock {
-                        title: "当前目标";
-                        sub: auto_mode ? "自动识别" : "手动选择";
+                        title: I18n.tr("当前目标", "Current Target", "現在の対象");
+                        sub: auto_mode
+                            ? I18n.tr("自动识别", "Auto detect", "自動検出")
+                            : I18n.tr("手动选择", "Manual selection", "手動選択");
                     }
 
                     InfoBox {
                         box-height: 132px;
-                        label: "TARGET";
+                        label: I18n.tr("目标", "TARGET", "対象");
                         value: target_text;
                         accent: has_target ? #9ef0b5 : #f6c76d;
                     }
 
                     InfoBox {
                         box-height: 132px;
-                        label: "DETECTED";
+                        label: I18n.tr("检测结果", "DETECTED", "検出結果");
                         value: detected_text;
                         accent: #a8d8ff;
                     }
@@ -119,16 +124,16 @@ export component StartPage inherits Rectangle {
 
                         Action {
                             horizontal-stretch: 1;
-                            label: "去目录页";
-                            sub: "修改或重新识别目录";
+                            label: I18n.tr("去目录页", "Open Path Page", "パス画面へ");
+                            sub: I18n.tr("修改或重新识别目录", "Edit or re-detect the game path", "パスを変更または再検出");
                             accent: #a8d8ff;
                             clicked => { root.goto_directory(); }
                         }
 
                         Action {
                             horizontal-stretch: 1;
-                            label: "全盘扫描";
-                            sub: "查找游戏目录";
+                            label: I18n.tr("全盘扫描", "Full Scan", "全体スキャン");
+                            sub: I18n.tr("查找游戏目录", "Find the game path", "ゲームパスを検索");
                             enabled: !busy;
                             accent: #9ef0b5;
                             clicked => { root.scan_clicked(); }

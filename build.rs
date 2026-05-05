@@ -15,15 +15,7 @@ use zip::CompressionMethod;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
-const MANAGED_ITEMS: &[&str] = &[
-    "BoundaryMetaServer-main",
-    "nodejs",
-    "commandlist.txt",
-    "DT_ItemType.json",
-    "dxgi.dll",
-    "startgame.bat",
-    "steam_appid.txt",
-];
+const MANAGED_ITEMS: &[&str] = &["DT_ItemType.json", "dxgi.dll", "steam_appid.txt"];
 
 fn main() -> Result<()> {
     // 构建系统 Cargo 通过环境变量把路径传给构建脚本；生成物全部放进 OUT_DIR，
@@ -38,6 +30,7 @@ fn main() -> Result<()> {
         .or_else(|_| find_payload_root(project_root))
         .ok();
 
+    println!("cargo:rerun-if-env-changed=BOUNDARY_PAYLOAD_ROOT");
     slint_build::compile("ui/appwindow.slint").context("compile Slint UI")?;
     build_payload_zip(payload_root.as_deref(), &out_dir)?;
     build_icon(&manifest_dir, project_root, &out_dir)?;

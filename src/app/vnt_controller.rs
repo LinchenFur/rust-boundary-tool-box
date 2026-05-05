@@ -47,8 +47,16 @@ impl AppController {
         });
 
         self.ui.set_vnt_busy(true);
-        self.ui.set_vnt_status_text("启动中".into());
-        self.ui.set_vnt_detail_text("正在启动联机平台".into());
+        self.ui
+            .set_vnt_status_text(self.tr("启动中", "Starting", "起動中").into());
+        self.ui.set_vnt_detail_text(
+            self.tr(
+                "正在启动联机平台",
+                "Starting the network platform",
+                "ネットワーク基盤を起動中",
+            )
+            .into(),
+        );
         self.append_log(&format!(
             "[{}] 启动 VNT 联机：{} / {}",
             core::now_text(),
@@ -63,10 +71,14 @@ impl AppController {
             Err(error) => {
                 self.ui.set_vnt_busy(false);
                 self.ui.set_vnt_running(false);
-                self.ui.set_vnt_status_text("启动失败".into());
+                self.ui
+                    .set_vnt_status_text(self.tr("启动失败", "Start failed", "起動失敗").into());
                 self.ui.set_vnt_detail_text(error.to_string().into());
                 self.append_log(&format!("[{}] VNT 启动失败：{}", core::now_text(), error));
-                self.show_error_dialog("联机", &error.to_string());
+                self.show_error_dialog(
+                    self.tr("联机", "Network", "ネットワーク"),
+                    &error.to_string(),
+                );
             }
         }
     }
@@ -76,18 +88,33 @@ impl AppController {
         if let Some(session) = self.vnt_session.as_mut() {
             session.stop();
             self.ui.set_vnt_busy(true);
-            self.ui.set_vnt_status_text("停止中".into());
-            self.ui.set_vnt_detail_text("正在关闭联机平台".into());
+            self.ui
+                .set_vnt_status_text(self.tr("停止中", "Stopping", "停止中").into());
+            self.ui.set_vnt_detail_text(
+                self.tr(
+                    "正在关闭联机平台",
+                    "Stopping the network platform",
+                    "ネットワーク基盤を停止中",
+                )
+                .into(),
+            );
             self.append_log(&format!("[{}] 正在停止 VNT 联机", core::now_text()));
         } else {
-            self.apply_vnt_snapshot(vnt_platform::idle_snapshot());
+            self.apply_vnt_snapshot(localized_vnt_idle_snapshot(self.language()));
         }
     }
 
     /// 等待下一次 VNT 快照刷新时先给出即时反馈。
     pub(super) fn refresh_vnt_status_hint(&mut self) {
         if self.vnt_session.is_some() {
-            self.ui.set_vnt_detail_text("等待联机核心刷新状态".into());
+            self.ui.set_vnt_detail_text(
+                self.tr(
+                    "等待联机核心刷新状态",
+                    "Waiting for the network core to refresh",
+                    "ネットワークコアの状態更新待ち",
+                )
+                .into(),
+            );
         }
     }
 
@@ -99,16 +126,17 @@ impl AppController {
                 self.vnt_session = None;
                 self.ui.set_vnt_busy(false);
                 self.ui.set_vnt_running(false);
-                self.ui.set_vnt_status_text("启动失败".into());
+                self.ui
+                    .set_vnt_status_text(self.tr("启动失败", "Start failed", "起動失敗").into());
                 self.ui.set_vnt_detail_text(error.clone().into());
-                self.set_vnt_server_rows(vnt_server_placeholder_rows());
-                self.set_vnt_peer_rows(vnt_placeholder_rows());
+                self.set_vnt_server_rows(vnt_server_placeholder_rows(self.language()));
+                self.set_vnt_peer_rows(vnt_placeholder_rows(self.language()));
                 self.append_log(&format!("[{}] VNT 异常：{}", core::now_text(), error));
-                self.show_error_dialog("联机", &error);
+                self.show_error_dialog(self.tr("联机", "Network", "ネットワーク"), &error);
             }
             VntEvent::Stopped(reason) => {
                 self.vnt_session = None;
-                let mut snapshot = vnt_platform::idle_snapshot();
+                let mut snapshot = localized_vnt_idle_snapshot(self.language());
                 snapshot.detail = reason.clone();
                 self.apply_vnt_snapshot(snapshot);
                 self.append_log(&format!("[{}] VNT 已停止：{}", core::now_text(), reason));

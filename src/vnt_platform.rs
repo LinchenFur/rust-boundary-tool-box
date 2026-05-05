@@ -4,6 +4,8 @@
 //! 对外 API 保持很小：带选项启动、发出快照/事件、通过 oneshot channel 停止。
 //! 整个流程不涉及 web UI 或 webview。
 
+use std::fs;
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
@@ -18,6 +20,8 @@ use vnt_core::tls::verifier::CertValidationMode;
 use vnt_core::tunnel_core::server::transport::config::ProtocolAddress;
 use vnt_core::utils::task_control::TaskGroupManager;
 use vnt_ipc as vnt_core;
+
+use crate::core::{APP_VERSION, INSTALLER_FOLDER_NAME, WINTUN_RELEASE_NAME, WINTUN_RELEASE_URL};
 
 /// 用户提供给 VNT 核心的启动选项。
 #[derive(Debug, Clone)]
@@ -578,27 +582,78 @@ fn default_device_name() -> String {
 }
 
 #[cfg(windows)]
-/// 使用 TUN 模式时，把内置 wintun.dll 解压到可执行文件旁边。
+/// 使用 TUN 模式时，按需下载 Wintun 并解压到可执行文件旁边。
 fn extract_wintun_dll() -> Result<()> {
-    #[cfg(target_arch = "x86_64")]
-    const WINTUN_DLL: &[u8] = include_bytes!("../vendor/vnt/dll/amd64/wintun.dll");
-    #[cfg(target_arch = "x86")]
-    const WINTUN_DLL: &[u8] = include_bytes!("../vendor/vnt/dll/x86/wintun.dll");
-    #[cfg(target_arch = "aarch64")]
-    const WINTUN_DLL: &[u8] = include_bytes!("../vendor/vnt/dll/arm64/wintun.dll");
-    #[cfg(target_arch = "arm")]
-    const WINTUN_DLL: &[u8] = include_bytes!("../vendor/vnt/dll/arm/wintun.dll");
-
-    let path = std::env::current_exe()
+    let runtime_dir = std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(Path::to_path_buf))
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("wintun.dll");
+        .unwrap_or_else(|| PathBuf::from("."));
+    let path = runtime_dir.join("wintun.dll");
     if !path.exists() {
-        std::fs::write(&path, WINTUN_DLL)
-            .with_context(|| format!("写入 {} 失败", path.display()))?;
+        let cache_dir = if runtime_dir.file_name().is_some_and(|name| {
+            name.to_string_lossy()
+                .eq_ignore_ascii_case(INSTALLER_FOLDER_NAME)
+        }) {
+            runtime_dir.join("downloads")
+        } else {
+            runtime_dir.join(INSTALLER_FOLDER_NAME).join("downloads")
+        };
+        let zip_bytes = cached_or_downloaded_wintun_zip(&cache_dir)?;
+        let dll = read_wintun_dll(&zip_bytes)?;
+        fs::write(&path, dll).with_context(|| format!("写入 {} 失败", path.display()))?;
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn cached_or_downloaded_wintun_zip(cache_dir: &Path) -> Result<Vec<u8>> {
+    fs::create_dir_all(cache_dir)
+        .with_context(|| format!("创建下载缓存目录失败：{}", cache_dir.display()))?;
+    let zip_path = cache_dir.join(WINTUN_RELEASE_NAME);
+    if zip_path.exists() {
+        return fs::read(&zip_path)
+            .with_context(|| format!("读取 Wintun 缓存失败：{}", zip_path.display()));
+    }
+    let bytes = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(90))
+        .user_agent(format!("boundary-toolbox/{APP_VERSION}"))
+        .build()?
+        .get(WINTUN_RELEASE_URL)
+        .send()
+        .context("下载 Wintun 失败")?
+        .error_for_status()
+        .context("Wintun 下载地址返回错误状态")?
+        .bytes()
+        .context("读取 Wintun 下载内容失败")?
+        .to_vec();
+    fs::write(&zip_path, &bytes)
+        .with_context(|| format!("写入 Wintun 缓存失败：{}", zip_path.display()))?;
+    Ok(bytes)
+}
+
+#[cfg(windows)]
+fn read_wintun_dll(zip_bytes: &[u8]) -> Result<Vec<u8>> {
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "amd64",
+        "x86" => "x86",
+        "aarch64" => "arm64",
+        "arm" => "arm",
+        other => bail!("当前架构暂不支持自动下载 Wintun：{other}"),
+    };
+    let entry_name = format!("wintun/bin/{arch}/wintun.dll");
+    let mut archive =
+        zip::ZipArchive::new(Cursor::new(zip_bytes)).context("无法读取 Wintun 压缩包")?;
+    let mut entry = archive
+        .by_name(&entry_name)
+        .with_context(|| format!("Wintun 压缩包缺少 {entry_name}"))?;
+    let mut bytes = Vec::new();
+    entry
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("读取 {entry_name} 失败"))?;
+    if bytes.is_empty() {
+        bail!("Wintun 压缩包中的 {entry_name} 是空文件");
+    }
+    Ok(bytes)
 }
 
 #[cfg(not(windows))]

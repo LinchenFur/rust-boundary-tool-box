@@ -2,6 +2,7 @@ import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
 import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
 import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, Txt } from "../components.slint";
 import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+import { I18n } from "../i18n.slint";
 
 export component ServersPage inherits Rectangle {
     in property <bool> servers_loading;
@@ -24,19 +25,21 @@ export component ServersPage inherits Rectangle {
                     spacing: 16px;
 
                     TitleBlock {
-                        title: "服务器";
+                        title: I18n.tr("服务器", "Servers", "サーバー");
                     }
 
                     InfoBox {
                         box-height: 108px;
-                        label: "STATUS";
+                        label: I18n.tr("状态", "STATUS", "状態");
                         value: server_status_text;
                         accent: servers_loading ? #f6c76d : #9ef0b5;
                     }
 
                     Action {
-                        label: servers_loading ? "刷新中" : "刷新服务器";
-                        sub: "读取最新 JSON";
+                        label: servers_loading
+                            ? I18n.tr("刷新中", "Refreshing", "更新中")
+                            : I18n.tr("刷新服务器", "Refresh Servers", "サーバーを更新");
+                        sub: I18n.tr("读取最新 JSON", "Load latest JSON", "最新 JSON を読み込み");
                         enabled: !servers_loading;
                         accent: #d7c4ff;
                         clicked => { root.refresh_servers_clicked(); }
@@ -54,7 +57,7 @@ export component ServersPage inherits Rectangle {
                     spacing: 14px;
 
                     TitleBlock {
-                        title: "服务器列表";
+                        title: I18n.tr("服务器列表", "Server List", "サーバー一覧");
                         sub: server_status_text;
                     }
 

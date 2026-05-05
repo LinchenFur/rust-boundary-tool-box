@@ -56,6 +56,8 @@ impl Default for VntPrefs {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct AppPrefs {
     #[serde(default)]
+    pub language: i32,
+    #[serde(default)]
     pub vnt: VntPrefs,
 }
 
@@ -110,6 +112,8 @@ impl AppPrefs {
 
     /// 补齐默认 VNT 服务器，并去掉空白/重复项。
     fn normalize(&mut self) {
+        self.language = self.language.clamp(0, 2);
+
         let mut normalized = Vec::new();
         for option in std::iter::once(self.vnt.server_text.as_str())
             .chain(self.vnt.server_options.iter().map(String::as_str))

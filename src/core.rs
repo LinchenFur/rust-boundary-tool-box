@@ -10,7 +10,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 /// 显示在 UI 中并写入安装元数据的应用版本。
-pub const APP_VERSION: &str = "1.2.3";
+pub const APP_VERSION: &str = "beta19.19.81";
 /// 游戏 Boundary 的 Steam App ID。
 pub const APP_ID: &str = "1364020";
 /// 用于校验 Binaries\Win64 目录的游戏主程序。
@@ -28,12 +28,30 @@ pub const PROJECT_REBOUND_RELEASE_URL: &str = "https://git-proxy.cubland.icu/htt
 /// 这些文件刻意从线上获取，而不是放进 payload.zip。
 pub const PROJECT_REBOUND_ONLINE_FILES: &[&str] =
     &["Payload.dll", "ProjectReboundServerWrapper.exe"];
+/// 登录服务器源码包。GitHub 下载统一走 git-proxy 加速。
+pub const BOUNDARY_META_SERVER_ARCHIVE_URL: &str = "https://git-proxy.cubland.icu/https://github.com/STanJK/BoundaryMetaServer/archive/refs/heads/main.zip";
+/// 安装到目标 Win64 目录内的登录服务器目录名。
+pub const BOUNDARY_META_SERVER_DIR_NAME: &str = "BoundaryMetaServer-main";
+/// Node.js 官方版本索引，用于安装本地登录服务器运行时。
+pub const NODEJS_DIST_INDEX_URL: &str = "https://nodejs.org/dist/index.json";
+/// 安装到目标 Win64 目录内的 Node.js 运行时目录名。
+pub const NODEJS_DIR_NAME: &str = "nodejs";
+/// Wintun 官方下载包。该源不在 GitHub，不需要 git-proxy。
+pub const WINTUN_RELEASE_URL: &str = "https://www.wintun.net/builds/wintun-0.14.1.zip";
+pub const WINTUN_RELEASE_NAME: &str = "wintun-0.14.1.zip";
 /// 本地登录/游戏服务需要的 TCP 端口。
 pub const REQUIRED_TCP_PORTS: &[u16] = &[6969, 7777, 8000, 9000];
 /// 本地游戏服务需要的 UDP 端口。
 pub const REQUIRED_UDP_PORTS: &[u16] = &[7777, 9000];
 /// 游戏连接本地登录服务器所用的启动参数值。
 pub const LOCAL_LOGIC_SERVER_URL: &str = "http://127.0.0.1:8000";
+/// 工具箱 UI 首选字体。
+pub const UI_FONT_FAMILY: &str = "Maple Mono NF CN";
+/// Maple Mono 官方 GitHub 最新 Release API。
+pub const MAPLE_FONT_LATEST_RELEASE_API: &str =
+    "https://api.github.com/repos/subframe7536/maple-font/releases/latest";
+/// 优先下载带 Nerd Font 和中文补全的非 hinted 包。
+pub const MAPLE_FONT_RELEASE_ASSET: &str = "MapleMono-NF-CN-unhinted.zip";
 /// 诊断页展示的端口行。
 pub const MONITORED_PORTS: &[(&str, u16)] = &[
     ("TCP", 6969),
@@ -65,16 +83,12 @@ pub struct ManagedItem {
 /// 工具箱会安装或移除的完整文件/目录集合。
 pub const MANAGED_ITEMS: &[ManagedItem] = &[
     ManagedItem {
-        name: "BoundaryMetaServer-main",
-        kind: ItemKind::Dir,
-    },
-    ManagedItem {
         name: "nodejs",
         kind: ItemKind::Dir,
     },
     ManagedItem {
-        name: "commandlist.txt",
-        kind: ItemKind::File,
+        name: BOUNDARY_META_SERVER_DIR_NAME,
+        kind: ItemKind::Dir,
     },
     ManagedItem {
         name: "DT_ItemType.json",
@@ -90,10 +104,6 @@ pub const MANAGED_ITEMS: &[ManagedItem] = &[
     },
     ManagedItem {
         name: "ProjectReboundServerWrapper.exe",
-        kind: ItemKind::File,
-    },
-    ManagedItem {
-        name: "startgame.bat",
         kind: ItemKind::File,
     },
     ManagedItem {
@@ -128,6 +138,15 @@ const OLD_MOD_UE4SS_SUPPORT_FILES: &[&str] = &[
 const OLD_MOD_UE4SS_LOADER_FILES: &[&str] = &["xinput1_3.dll"];
 
 pub type Logger = Arc<dyn Fn(String) + Send + Sync + 'static>;
+pub type ProgressReporter = Arc<dyn Fn(InstallProgress) + Send + Sync + 'static>;
+
+/// 安装过程的可见进度。value 使用 0.0..=1.0，detail 放当前下载/解压细节。
+#[derive(Debug, Clone)]
+pub struct InstallProgress {
+    pub value: f32,
+    pub title: String,
+    pub detail: String,
+}
 
 /// 写入 state.json 的逐项安装记录，用于精确卸载和恢复。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -265,6 +284,7 @@ pub struct InstallerCore {
 pub(crate) mod cleanup;
 pub(crate) mod discovery;
 pub(crate) mod filesystem;
+pub(crate) mod font;
 pub(crate) mod install_ops;
 pub(crate) mod installer;
 pub(crate) mod metadata;
@@ -274,5 +294,5 @@ pub(crate) mod process;
 pub(crate) mod runtime_ops;
 pub(crate) mod util;
 
-pub use process::{format_port_conflicts, summarize_runtime_processes};
+pub use process::format_port_conflicts;
 pub use util::now_text;

@@ -13,6 +13,7 @@ impl AppController {
         });
 
         let core = Arc::new(InstallerCore::new(logger)?);
+        let active_page = Arc::new(AtomicI32::new(0));
         let port_target = Arc::new(RwLock::new(None));
         let logs_dir = core.installer_home.join("logs");
         fs::create_dir_all(&logs_dir)?;
@@ -48,7 +49,7 @@ impl AppController {
             core::now_text(),
             session_log_path.display()
         )?;
-        let app_prefs = match AppPrefs::load(&core.installer_home) {
+        let mut app_prefs = match AppPrefs::load(&core.installer_home) {
             Ok(prefs) => prefs,
             Err(error) => {
                 let backup_text = match AppPrefs::preserve_invalid(&core.installer_home) {
@@ -66,7 +67,10 @@ impl AppController {
                 AppPrefs::default()
             }
         };
+        app_prefs.language = i18n::normalize_language(app_prefs.language);
+        let language = app_prefs.language;
         let vnt_prefs = app_prefs.vnt.clone();
+        ui.set_language(language);
 
         // 对 Slint 模型只创建一次，后续原地更新，避免破坏已有 ListView 绑定。
         let port_model = Rc::new(VecModel::from(
@@ -74,7 +78,12 @@ impl AppController {
                 .iter()
                 .map(|(protocol, port)| PortRow {
                     label: SharedString::from(format!("{}/{}", protocol, port)),
-                    detail: SharedString::from("检测中..."),
+                    detail: SharedString::from(i18n::tr(
+                        language,
+                        "检测中...",
+                        "Checking...",
+                        "確認中...",
+                    )),
                     protocol: SharedString::from(*protocol),
                     port: i32::from(*port),
                     pid: 0,
@@ -85,8 +94,19 @@ impl AppController {
         ));
         let drive_model = Rc::new(VecModel::<DriveRow>::default());
         let server_model = Rc::new(VecModel::from(vec![server_placeholder_row(
-            "正在加载服务器列表",
-            "等待接口返回数据",
+            i18n::tr(
+                language,
+                "正在加载服务器列表",
+                "Loading server list",
+                "サーバー一覧を読み込み中",
+            ),
+            i18n::tr(
+                language,
+                "等待接口返回数据",
+                "Waiting for the API response",
+                "API 応答待ち",
+            ),
+            language,
         )]));
         let vnt_server_option_model = Rc::new(VecModel::from(
             vnt_prefs
@@ -95,8 +115,8 @@ impl AppController {
                 .map(|server| SharedString::from(server.as_str()))
                 .collect::<Vec<_>>(),
         ));
-        let vnt_server_model = Rc::new(VecModel::from(vnt_server_placeholder_rows()));
-        let vnt_peer_model = Rc::new(VecModel::from(vnt_placeholder_rows()));
+        let vnt_server_model = Rc::new(VecModel::from(vnt_server_placeholder_rows(language)));
+        let vnt_peer_model = Rc::new(VecModel::from(vnt_placeholder_rows(language)));
         ui.set_port_rows(ModelRc::from(port_model.clone()));
         ui.set_drive_rows(ModelRc::from(drive_model.clone()));
         ui.set_server_rows(ModelRc::from(server_model.clone()));
@@ -104,19 +124,71 @@ impl AppController {
         ui.set_vnt_server_rows(ModelRc::from(vnt_server_model.clone()));
         ui.set_vnt_peer_rows(ModelRc::from(vnt_peer_model.clone()));
         ui.set_payload_label(core.payload_label().into());
-        ui.set_detected_text("正在检测 Steam 安装目录...".into());
-        ui.set_target_text("未解析到有效的安装目录".into());
-        ui.set_status_text(format!("准备就绪 / v{}", APP_VERSION).into());
-        ui.set_process_status_text("运行进程：未检测".into());
+        ui.set_detected_text(
+            i18n::tr(
+                language,
+                "正在检测 Steam 安装目录...",
+                "Detecting Steam install path...",
+                "Steam のインストール先を検出中...",
+            )
+            .into(),
+        );
+        ui.set_target_text(
+            i18n::tr(
+                language,
+                "未解析到有效的安装目录",
+                "No valid install path resolved",
+                "有効なインストール先が見つかりません",
+            )
+            .into(),
+        );
+        ui.set_status_text(
+            format!(
+                "{} / v{}",
+                i18n::tr(language, "准备就绪", "Ready", "準備完了"),
+                APP_VERSION
+            )
+            .into(),
+        );
+        ui.set_process_status_text(
+            i18n::tr(
+                language,
+                "运行进程：未检测",
+                "Runtime processes: not checked",
+                "実行中プロセス: 未確認",
+            )
+            .into(),
+        );
         ui.set_show_logs(false);
         ui.set_busy(false);
         ui.set_pulse(false);
+        ui.set_install_progress_visible(false);
+        ui.set_install_progress_value(0.0);
+        ui.set_install_progress_percent("0%".into());
+        ui.set_install_progress_title("".into());
+        ui.set_install_progress_detail("".into());
         ui.set_auto_mode(true);
         ui.set_has_target(false);
         ui.set_servers_loading(false);
-        ui.set_server_status_text("服务器列表：未刷新".into());
+        ui.set_server_status_text(
+            i18n::tr(
+                language,
+                "服务器列表：未刷新",
+                "Server list: not refreshed",
+                "サーバー一覧: 未更新",
+            )
+            .into(),
+        );
         ui.set_update_checking(false);
-        ui.set_update_status_text("更新：未检查".into());
+        ui.set_update_status_text(
+            i18n::tr(
+                language,
+                "更新：未检查",
+                "Update: not checked",
+                "更新: 未確認",
+            )
+            .into(),
+        );
         ui.set_show_drive_dialog(false);
         ui.set_show_app_dialog(false);
         ui.set_app_dialog_confirm(false);
@@ -125,8 +197,8 @@ impl AppController {
         ui.set_app_dialog_title("".into());
         ui.set_app_dialog_text("".into());
         ui.set_app_dialog_input_text("".into());
-        ui.set_app_dialog_primary_text("确定".into());
-        ui.set_app_dialog_secondary_text("取消".into());
+        ui.set_app_dialog_primary_text(i18n::tr(language, "确定", "OK", "OK").into());
+        ui.set_app_dialog_secondary_text(i18n::tr(language, "取消", "Cancel", "キャンセル").into());
         ui.set_vnt_server_text(vnt_prefs.server_text.into());
         ui.set_vnt_new_server_text("".into());
         ui.set_vnt_network_code(vnt_prefs.network_code.into());
@@ -136,7 +208,7 @@ impl AppController {
         ui.set_vnt_rtx(vnt_prefs.rtx);
         ui.set_vnt_busy(false);
         ui.set_vnt_running(false);
-        apply_vnt_idle_to_ui(&ui);
+        apply_vnt_idle_to_ui(&ui, language);
 
         let controller = Rc::new(RefCell::new(Self {
             ui,
@@ -144,6 +216,7 @@ impl AppController {
             tx,
             rx,
             stop_background: Arc::new(AtomicBool::new(false)),
+            active_page,
             port_target,
             session_log_file,
             mode: PathMode::Auto,
@@ -164,6 +237,7 @@ impl AppController {
             controller.borrow().core.clone(),
             controller.borrow().tx.clone(),
             controller.borrow().stop_background.clone(),
+            controller.borrow().active_page.clone(),
             controller.borrow().port_target.clone(),
         );
         Ok(controller)
@@ -173,6 +247,18 @@ impl AppController {
     pub(super) fn bind_callbacks(controller: &Rc<RefCell<Self>>) {
         let ui = controller.borrow().ui.as_weak();
 
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_page_changed(move |page| {
+                controller.borrow_mut().on_page_changed(page);
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_language_changed(move |language| {
+                controller.borrow_mut().set_language(language);
+            });
+        }
         {
             let controller = Rc::clone(controller);
             ui.unwrap().on_auto_mode_clicked(move || {
@@ -215,6 +301,15 @@ impl AppController {
             let controller = Rc::clone(controller);
             ui.unwrap().on_install_clicked(move || {
                 controller.borrow_mut().start_install();
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_install_progress_closed(move || {
+                let controller = controller.borrow();
+                if !controller.ui.get_busy() {
+                    controller.ui.set_install_progress_visible(false);
+                }
             });
         }
         {
@@ -400,9 +495,30 @@ impl AppController {
 
     /// 执行初始自动识别和服务器列表刷新。
     pub(super) fn initialize(&mut self) {
+        let installing_font = self.start_ui_font_check();
         self.refresh_target_from_mode(true);
         self.start_refresh_servers();
-        self.start_update_check(true);
+        if !installing_font {
+            self.start_update_check(true);
+        }
+    }
+
+    pub(super) fn on_page_changed(&mut self, page: i32) {
+        self.active_page.store(page, Ordering::Relaxed);
+        if page == 2 {
+            self.refresh_port_rows_once();
+        }
+    }
+
+    fn refresh_port_rows_once(&self) {
+        let core = self.core.clone();
+        let tx = self.tx.clone();
+        let target = self.port_target.read().ok().and_then(|guard| guard.clone());
+        thread::spawn(move || {
+            if let Ok(rows) = core.port_status_rows_for_target(target.as_deref()) {
+                let _ = tx.send(AppMessage::PortRows(rows));
+            }
+        });
     }
 
     /// 在 UI 退出前停止后台会话。

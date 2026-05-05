@@ -12,10 +12,13 @@ use super::cleanup::clean_engine_ini;
 use super::pathing::validate_win64_path;
 use super::process::{
     collect_port_conflicts, format_port_conflicts, kill_pids, launch_files, path_match_key,
-    runtime_process_pids, summarize_runtime_processes, taskkill_pids,
+    runtime_image_pids, runtime_process_pids, summarize_runtime_processes, taskkill_images,
+    taskkill_pids,
 };
 use super::util::hidden_command;
 use super::*;
+
+const RUNTIME_SHUTDOWN_IMAGES: &[&str] = &["ProjectReboundServerWrapper.exe", GAME_EXE];
 
 impl InstallerCore {
     /// 按启动模式解析所需文件，并集中报告缺失路径。
@@ -46,6 +49,25 @@ impl InstallerCore {
                 missing.join("\n- ")
             );
         }
+        if mode.uses_login_server() {
+            let login_missing: Vec<String> = [
+                files.server_dir.join("index.js"),
+                files.server_dir.join("package.json"),
+                files.server_dir.join("node_modules").join("body-parser"),
+                files.server_dir.join("node_modules").join("express"),
+                files.server_dir.join("node_modules").join("protobufjs"),
+            ]
+            .into_iter()
+            .filter(|path| !path.exists())
+            .map(|path| path.display().to_string())
+            .collect();
+            if !login_missing.is_empty() {
+                bail!(
+                    "登录服务器依赖缺失，请重新安装后再启动：\n- {}",
+                    login_missing.join("\n- ")
+                );
+            }
+        }
         Ok(files)
     }
 
@@ -59,6 +81,7 @@ impl InstallerCore {
         let wrapper_exe = path_match_key(&files.wrapper_exe);
         let node_exe = path_match_key(&files.node_exe);
         let target_dir = path_match_key(target_win64);
+        let game_name = GAME_EXE.to_ascii_lowercase();
 
         let mut system = System::new_all();
         system.refresh_all();
@@ -91,7 +114,8 @@ impl InstallerCore {
             // 优先使用精确可执行路径；只有命令行能证明进程属于当前安装时，
             // 才退回到进程名匹配。
             if exe_lower == game_exe
-                || (name_lower == GAME_EXE.to_ascii_lowercase() && launched_from_target)
+                || (name_lower == game_name
+                    && (launched_from_target || exe_lower.is_empty() || cmd_lower.is_empty()))
             {
                 snapshot.game.push(item);
             } else if exe_lower == wrapper_exe
@@ -191,37 +215,78 @@ impl InstallerCore {
 
     /// 结束游戏、服务包装器和登录服务器进程。
     pub fn stop_runtime_processes(&self, target_win64: &Path) -> Result<String> {
-        let snapshot = self.collect_runtime_processes(target_win64)?;
-        let mut pids = Vec::new();
-        for group in [&snapshot.game, &snapshot.wrapper, &snapshot.server] {
-            for process in group.iter() {
-                if process.pid > 0 && !pids.contains(&process.pid) {
-                    pids.push(process.pid);
-                }
-            }
-        }
-        if pids.is_empty() {
+        let initial = self.collect_runtime_processes(target_win64)?;
+        let initial_image_pids = runtime_image_pids(RUNTIME_SHUTDOWN_IMAGES);
+        if runtime_process_pids(&initial).is_empty() && initial_image_pids.is_empty() {
             self.log("关闭所有进程：未检测到需要关闭的相关进程。");
             return Ok("当前没有需要关闭的相关进程。".to_string());
         }
-        kill_pids(&pids)?;
         self.log(format!(
-            "关闭所有进程：已请求结束 PID {}",
-            pids.iter()
-                .map(u32::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
+            "关闭所有进程：初始检测到 {}{}",
+            summarize_runtime_processes(&initial),
+            image_pid_summary(&initial_image_pids)
         ));
-        Ok(format!(
-            "已关闭相关进程：\n{}",
-            summarize_runtime_processes(&snapshot)
-        ))
+
+        let mut killed_pids = Vec::new();
+        let mut kill_failures = Vec::new();
+        let mut empty_rounds = 0;
+        for _ in 0..30 {
+            let current = self.collect_runtime_processes(target_win64)?;
+            let mut pids = runtime_process_pids(&current);
+            append_missing_pids(&mut pids, &runtime_image_pids(RUNTIME_SHUTDOWN_IMAGES));
+            if pids.is_empty() {
+                empty_rounds += 1;
+                if empty_rounds >= 4 {
+                    self.log("关闭所有进程：已连续确认全部退出。");
+                    return Ok(format!(
+                        "已关闭相关进程：\n{}{}",
+                        summarize_runtime_processes(&initial),
+                        killed_pid_summary(&killed_pids)
+                    ));
+                }
+                thread::sleep(Duration::from_millis(500));
+                continue;
+            }
+            empty_rounds = 0;
+            for pid in &pids {
+                if !killed_pids.contains(pid) {
+                    killed_pids.push(*pid);
+                }
+            }
+            let failures = taskkill_pids(&pids)?;
+            kill_failures.extend(failures);
+            kill_failures.extend(taskkill_images(RUNTIME_SHUTDOWN_IMAGES)?);
+            thread::sleep(Duration::from_millis(500));
+        }
+
+        let latest = self.collect_runtime_processes(target_win64)?;
+        let latest_image_pids = runtime_image_pids(RUNTIME_SHUTDOWN_IMAGES);
+        if runtime_process_pids(&latest).is_empty() && latest_image_pids.is_empty() {
+            self.log("关闭所有进程：已确认全部退出。");
+            return Ok(format!(
+                "已关闭相关进程：\n{}{}",
+                summarize_runtime_processes(&initial),
+                killed_pid_summary(&killed_pids)
+            ));
+        }
+        let failure_text = if kill_failures.is_empty() {
+            String::new()
+        } else {
+            format!("\ntaskkill 失败详情：{}", kill_failures.join("；"))
+        };
+        bail!(
+            "仍有相关进程在运行，可能有外部程序正在自动拉起游戏：{}{}{}",
+            summarize_runtime_processes(&latest),
+            image_pid_summary(&latest_image_pids),
+            failure_text
+        )
     }
 
     /// 安装前尽力关闭进程，并在结束后再次校验。
     pub(super) fn stop_runtime_processes_before_install(&self, target_win64: &Path) -> Result<()> {
         let snapshot = self.collect_runtime_processes(target_win64)?;
-        let pids = runtime_process_pids(&snapshot);
+        let mut pids = runtime_process_pids(&snapshot);
+        append_missing_pids(&mut pids, &runtime_image_pids(RUNTIME_SHUTDOWN_IMAGES));
         if pids.is_empty() {
             self.log("安装前检查：未检测到正在运行的相关进程。");
             return Ok(());
@@ -231,32 +296,48 @@ impl InstallerCore {
             "安装前关闭相关进程：{}",
             summarize_runtime_processes(&snapshot)
         ));
-        let kill_failures = taskkill_pids(&pids)?;
+        let mut kill_failures = taskkill_pids(&pids)?;
+        kill_failures.extend(taskkill_images(RUNTIME_SHUTDOWN_IMAGES)?);
 
+        let mut empty_rounds = 0;
         for _ in 0..20 {
             thread::sleep(Duration::from_millis(250));
             let latest = self.collect_runtime_processes(target_win64)?;
-            if runtime_process_pids(&latest).is_empty() {
-                if !kill_failures.is_empty() {
-                    self.log(format!(
-                        "安装前关闭相关进程：taskkill 返回失败但目标进程已退出：{}",
-                        kill_failures.join("；")
-                    ));
+            let mut latest_pids = runtime_process_pids(&latest);
+            append_missing_pids(
+                &mut latest_pids,
+                &runtime_image_pids(RUNTIME_SHUTDOWN_IMAGES),
+            );
+            if latest_pids.is_empty() {
+                empty_rounds += 1;
+                if empty_rounds >= 3 {
+                    if !kill_failures.is_empty() {
+                        self.log(format!(
+                            "安装前关闭相关进程：taskkill 返回失败但目标进程已退出：{}",
+                            kill_failures.join("；")
+                        ));
+                    }
+                    self.log("安装前关闭相关进程：已连续确认全部退出。");
+                    return Ok(());
                 }
-                self.log("安装前关闭相关进程：已全部退出。");
-                return Ok(());
+                continue;
             }
+            empty_rounds = 0;
+            kill_failures.extend(taskkill_pids(&latest_pids)?);
+            kill_failures.extend(taskkill_images(RUNTIME_SHUTDOWN_IMAGES)?);
         }
 
         let latest = self.collect_runtime_processes(target_win64)?;
+        let latest_image_pids = runtime_image_pids(RUNTIME_SHUTDOWN_IMAGES);
         let failure_text = if kill_failures.is_empty() {
             String::new()
         } else {
             format!("\ntaskkill 失败详情：{}", kill_failures.join("；"))
         };
         bail!(
-            "安装前仍有相关进程未退出，请手动关闭后重试：{}{}",
+            "安装前仍有相关进程未退出，请手动关闭后重试：{}{}{}",
             summarize_runtime_processes(&latest),
+            image_pid_summary(&latest_image_pids),
             failure_text
         )
     }
@@ -272,11 +353,15 @@ impl InstallerCore {
     /// 启动登录服务器。
     fn launch_login_server(&self, files: &LaunchFiles) -> Result<()> {
         self.log(format!("启动登录服务器：{}", files.node_exe.display()));
-        hidden_command(&files.node_exe)
+        let mut child = hidden_command(&files.node_exe)
             .current_dir(&files.server_dir)
             .arg("index.js")
             .spawn()
             .context("启动登录服务器失败")?;
+        thread::sleep(Duration::from_secs(1));
+        if let Some(status) = child.try_wait().context("检查登录服务器进程状态失败")? {
+            bail!("登录服务器启动后立即退出：{status}。请重新安装后再启动。");
+        }
         Ok(())
     }
 
@@ -333,5 +418,41 @@ impl InstallerCore {
             notes.push(format!("并已清理冲突配置：{}", path.display()));
         }
         Ok(notes.join("\n"))
+    }
+}
+
+fn killed_pid_summary(pids: &[u32]) -> String {
+    if pids.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n已请求结束 PID：{}",
+            pids.iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    }
+}
+
+fn image_pid_summary(pids: &[u32]) -> String {
+    if pids.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "；专用镜像 PID {}",
+            pids.iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    }
+}
+
+fn append_missing_pids(target: &mut Vec<u32>, extra: &[u32]) {
+    for pid in extra {
+        if *pid > 0 && !target.contains(pid) {
+            target.push(*pid);
+        }
     }
 }

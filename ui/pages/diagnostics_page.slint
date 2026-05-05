@@ -2,6 +2,7 @@ import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
 import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
 import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, Txt } from "../components.slint";
 import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+import { I18n } from "../i18n.slint";
 
 export component DiagnosticsPage inherits Rectangle {
     in property <bool> has_target;
@@ -30,28 +31,28 @@ export component DiagnosticsPage inherits Rectangle {
                     spacing: 16px;
 
                     TitleBlock {
-                        title: "进程";
-                        sub: "检测或关闭可能占用端口的进程";
+                        title: I18n.tr("进程", "Processes", "プロセス");
+                        sub: I18n.tr("检测或关闭可能占用端口的进程", "Detect or stop processes that may occupy ports", "ポートを占有する可能性のあるプロセスを確認または停止");
                     }
 
                     InfoBox {
                         box-height: 120px;
-                        label: "PROCESS";
+                        label: I18n.tr("进程", "PROCESS", "プロセス");
                         value: process_status_text;
                         accent: #d7c4ff;
                     }
 
                     Action {
-                        label: "进程检测";
-                        sub: "扫描运行进程";
+                        label: I18n.tr("进程检测", "Detect Processes", "プロセス検出");
+                        sub: I18n.tr("扫描运行进程", "Scan running processes", "実行中プロセスをスキャン");
                         enabled: has_target && !busy;
                         accent: #d7c4ff;
                         clicked => { root.detect_processes_clicked(); }
                     }
 
                     Action {
-                        label: "关闭相关进程";
-                        sub: "结束游戏/登录服/包装器";
+                        label: I18n.tr("关闭相关进程", "Stop Related Processes", "関連プロセスを停止");
+                        sub: I18n.tr("结束游戏/登录服/包装器", "Stop game/login server/wrapper", "ゲーム/ログインサーバー/ラッパーを終了");
                         enabled: has_target && !busy;
                         accent: #ffb4ab;
                         clicked => { root.stop_processes_clicked(); }
@@ -79,13 +80,15 @@ export component DiagnosticsPage inherits Rectangle {
 
                         TitleBlock {
                             horizontal-stretch: 1;
-                            title: show_logs ? "日志" : "端口";
-                            sub: show_logs ? "运行日志输出" : "社区服端口占用状态";
+                            title: show_logs ? I18n.tr("日志", "Logs", "ログ") : I18n.tr("端口", "Ports", "ポート");
+                            sub: show_logs
+                                ? I18n.tr("运行日志输出", "Runtime log output", "実行ログ出力")
+                                : I18n.tr("社区服端口占用状态", "Community server port occupancy", "コミュニティサーバーポートの占有状態");
                         }
 
                         Action {
                             width: 140px;
-                            label: show_logs ? "看端口" : "看日志";
+                            label: show_logs ? I18n.tr("看端口", "Show Ports", "ポート表示") : I18n.tr("看日志", "Show Logs", "ログ表示");
                             sub: "";
                             enabled: !busy;
                             accent: #d7c4ff;
@@ -118,10 +121,10 @@ export component DiagnosticsPage inherits Rectangle {
                             width: parent.width - 28px;
                             text: log_text;
                             color: #dbeafe;
-                            font-family: "Consolas";
+                            font-family: "Maple Mono NF CN";
                             font-size: 13px;
                             font-weight: 500;
-                            wrap: word-wrap;
+                            wrap: char-wrap;
                         }
                     }
                 }

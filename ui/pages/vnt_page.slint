@@ -2,6 +2,7 @@ import { ListView, ScrollView } from "std-widgets.slint";
 import { VntPeerRow, VntServerRow } from "../models.slint";
 import { Action, InfoBox, OptionSwitch, Panel, ServerDropdown, TextField, TitleBlock, Txt } from "../components.slint";
 import { VntPeerLine, VntServerLine } from "../rows.slint";
+import { I18n } from "../i18n.slint";
 
 export component VntPage inherits Rectangle {
     private property <bool> page_locked: true;
@@ -44,13 +45,15 @@ export component VntPage inherits Rectangle {
                 spacing: 12px;
 
                 TitleBlock {
-                    title: "联机";
-                    sub: vnt_running ? "虚拟局域网已运行" : "创建或加入同一个网络编号";
+                    title: I18n.tr("联机", "Network", "ネットワーク");
+                    sub: vnt_running
+                        ? I18n.tr("虚拟局域网已运行", "Virtual LAN is running", "仮想 LAN は実行中")
+                        : I18n.tr("创建或加入同一个网络编号", "Create or join the same network code", "同じネットワーク番号を作成または参加");
                 }
 
                 InfoBox {
                     box-height: 78px;
-                    label: "STATUS";
+                    label: I18n.tr("状态", "STATUS", "状態");
                     value: vnt_status_text + "\n" + vnt_detail_text;
                     accent: vnt_running ? #9ef0b5 : (vnt_busy ? #f6c76d : #a8d8ff);
                 }
@@ -71,7 +74,7 @@ export component VntPage inherits Rectangle {
                             spacing: 8px;
 
                             Txt {
-                                text: "服务器地址";
+                                text: I18n.tr("服务器地址", "Server Address", "サーバーアドレス");
                                 color: #95a3b8;
                                 font-size: 12px;
                                 font-weight: 700;
@@ -94,7 +97,7 @@ export component VntPage inherits Rectangle {
                                 TextField {
                                     horizontal-stretch: 1;
                                     text <=> root.vnt_new_server_text;
-                                    placeholder: "输入自定义服务器地址";
+                                    placeholder: I18n.tr("输入自定义服务器地址", "Enter a custom server address", "カスタムサーバーアドレスを入力");
                                     enabled: !vnt_running && !vnt_busy;
                                     accepted => {
                                         if root.vnt_new_server_text != "" {
@@ -106,7 +109,7 @@ export component VntPage inherits Rectangle {
                                 Action {
                                     width: 86px;
                                     height: 46px;
-                                    label: "添加";
+                                    label: I18n.tr("添加", "Add", "追加");
                                     sub: "";
                                     enabled: !vnt_running && !vnt_busy && vnt_new_server_text != "";
                                     accent: #62e2c1;
@@ -119,7 +122,7 @@ export component VntPage inherits Rectangle {
                             }
 
                             Txt {
-                                text: "网络编号";
+                                text: I18n.tr("网络编号", "Network Code", "ネットワーク番号");
                                 color: #95a3b8;
                                 font-size: 12px;
                                 font-weight: 700;
@@ -127,7 +130,7 @@ export component VntPage inherits Rectangle {
 
                             TextField {
                                 text <=> root.vnt_network_code;
-                                placeholder: "相同编号会进入同一虚拟局域网";
+                                placeholder: I18n.tr("相同编号会进入同一虚拟局域网", "Same code joins the same virtual LAN", "同じ番号で同じ仮想 LAN に参加");
                                 enabled: !vnt_running && !vnt_busy;
                                 edited(text) => {
                                     root.vnt_network_code = text;
@@ -136,7 +139,7 @@ export component VntPage inherits Rectangle {
                             }
 
                             Txt {
-                                text: "加密密码";
+                                text: I18n.tr("加密密码", "Encryption Password", "暗号化パスワード");
                                 color: #95a3b8;
                                 font-size: 12px;
                                 font-weight: 700;
@@ -144,7 +147,7 @@ export component VntPage inherits Rectangle {
 
                             TextField {
                                 text <=> root.vnt_password;
-                                placeholder: "可选";
+                                placeholder: I18n.tr("可选", "Optional", "任意");
                                 enabled: !vnt_running && !vnt_busy;
                                 input-type: InputType.password;
                                 edited(text) => {
@@ -160,9 +163,11 @@ export component VntPage inherits Rectangle {
                                 OptionSwitch {
                                     enabled: !vnt_running && !vnt_busy;
                                     checked: vnt_no_tun;
-                                    on-label: "端口模式";
-                                    off-label: "虚拟网卡模式";
-                                    sub: vnt_no_tun ? "不创建虚拟网卡" : "游戏局域网联机";
+                                    on-label: I18n.tr("端口模式", "Port Mode", "ポートモード");
+                                    off-label: I18n.tr("虚拟网卡模式", "Virtual Adapter", "仮想アダプター");
+                                    sub: vnt_no_tun
+                                        ? I18n.tr("不创建虚拟网卡", "No virtual adapter", "仮想アダプターを作成しない")
+                                        : I18n.tr("游戏局域网联机", "Game LAN networking", "ゲーム LAN 接続");
                                     toggled(value) => {
                                         root.vnt_no_tun = value;
                                         root.vnt_settings_changed();
@@ -177,9 +182,11 @@ export component VntPage inherits Rectangle {
                                         horizontal-stretch: 1;
                                         enabled: !vnt_running && !vnt_busy;
                                         checked: vnt_compress;
-                                        on-label: "压缩传输";
-                                        off-label: "压缩传输";
-                                        sub: vnt_compress ? "已开启" : "弱网可开启";
+                                        on-label: I18n.tr("压缩传输", "Compression", "圧縮転送");
+                                        off-label: I18n.tr("压缩传输", "Compression", "圧縮転送");
+                                        sub: vnt_compress
+                                            ? I18n.tr("已开启", "Enabled", "有効")
+                                            : I18n.tr("弱网可开启", "Useful on weak networks", "不安定な回線で有効");
                                         toggled(value) => {
                                             root.vnt_compress = value;
                                             root.vnt_settings_changed();
@@ -190,9 +197,11 @@ export component VntPage inherits Rectangle {
                                         horizontal-stretch: 1;
                                         enabled: !vnt_running && !vnt_busy;
                                         checked: vnt_rtx;
-                                        on-label: "QUIC 通道";
-                                        off-label: "QUIC 通道";
-                                        sub: vnt_rtx ? "已开启" : "高丢包可开";
+                                        on-label: I18n.tr("QUIC 通道", "QUIC Channel", "QUIC チャネル");
+                                        off-label: I18n.tr("QUIC 通道", "QUIC Channel", "QUIC チャネル");
+                                        sub: vnt_rtx
+                                            ? I18n.tr("已开启", "Enabled", "有効")
+                                            : I18n.tr("高丢包可开", "Use on high packet loss", "パケットロスが多い時に使用");
                                         toggled(value) => {
                                             root.vnt_rtx = value;
                                             root.vnt_settings_changed();
@@ -210,8 +219,10 @@ export component VntPage inherits Rectangle {
 
                     Action {
                         horizontal-stretch: 1;
-                        label: vnt_running ? "运行中" : (vnt_busy ? "启动中" : "启动联机");
-                        sub: vnt_running ? "网络已建立" : "START";
+                        label: vnt_running
+                            ? I18n.tr("运行中", "Running", "実行中")
+                            : (vnt_busy ? I18n.tr("启动中", "Starting", "起動中") : I18n.tr("启动联机", "Start Network", "ネットワーク開始"));
+                        sub: vnt_running ? I18n.tr("网络已建立", "Network established", "ネットワーク確立済み") : I18n.tr("开始", "START", "開始");
                         enabled: !vnt_running && !vnt_busy;
                         primary: false;
                         accent: #62e2c1;
@@ -220,7 +231,7 @@ export component VntPage inherits Rectangle {
 
                     Action {
                         width: 128px;
-                        label: vnt_busy ? "处理中" : "停止";
+                        label: vnt_busy ? I18n.tr("处理中", "Working", "処理中") : I18n.tr("停止", "Stop", "停止");
                         sub: "";
                         enabled: vnt_running && !vnt_busy;
                         accent: #ffb4ab;
@@ -245,13 +256,13 @@ export component VntPage inherits Rectangle {
 
                     TitleBlock {
                         horizontal-stretch: 1;
-                        title: "联机状态";
+                        title: I18n.tr("联机状态", "Network Status", "ネットワーク状態");
                         sub: vnt_peer_summary_text;
                     }
 
                     Action {
                         width: 132px;
-                        label: "刷新";
+                        label: I18n.tr("刷新", "Refresh", "更新");
                         sub: "";
                         enabled: vnt_running && !vnt_busy;
                         accent: #a8d8ff;
@@ -266,7 +277,7 @@ export component VntPage inherits Rectangle {
                     InfoBox {
                         horizontal-stretch: 1;
                         box-height: 76px;
-                        label: "VIRTUAL IP";
+                        label: I18n.tr("虚拟 IP", "VIRTUAL IP", "仮想 IP");
                         value: vnt_ip_text;
                         accent: vnt_running ? #9ef0b5 : #54617a;
                     }
@@ -274,7 +285,7 @@ export component VntPage inherits Rectangle {
                     InfoBox {
                         horizontal-stretch: 1;
                         box-height: 76px;
-                        label: "SERVER";
+                        label: I18n.tr("服务器", "SERVER", "サーバー");
                         value: vnt_server_status_text;
                         accent: vnt_running ? #a8d8ff : #54617a;
                     }
@@ -287,7 +298,7 @@ export component VntPage inherits Rectangle {
                     InfoBox {
                         horizontal-stretch: 1;
                         box-height: 76px;
-                        label: "NETWORK";
+                        label: I18n.tr("网络", "NETWORK", "ネットワーク");
                         value: vnt_network_code == "" ? "-" : vnt_network_code;
                         accent: #d7c4ff;
                     }
@@ -295,7 +306,7 @@ export component VntPage inherits Rectangle {
                     InfoBox {
                         horizontal-stretch: 1;
                         box-height: 76px;
-                        label: "NAT";
+                        label: I18n.tr("NAT 类型", "NAT", "NAT 種別");
                         value: vnt_nat_text;
                         accent: #f6c76d;
                     }
@@ -319,7 +330,7 @@ export component VntPage inherits Rectangle {
                                 spacing: 12px;
 
                                 Txt {
-                                    text: "VNT 服务器";
+                                    text: I18n.tr("VNT 服务器", "VNT Servers", "VNT サーバー");
                                     color: #eef4fb;
                                     font-size: 18px;
                                     font-weight: 800;
@@ -364,7 +375,7 @@ export component VntPage inherits Rectangle {
                                 spacing: 12px;
 
                                 Txt {
-                                    text: "联机节点";
+                                    text: I18n.tr("联机节点", "Network Peers", "ネットワークノード");
                                     color: #eef4fb;
                                     font-size: 18px;
                                     font-weight: 800;
@@ -417,7 +428,7 @@ export component VntPage inherits Rectangle {
             Txt {
                 width: parent.width;
                 height: parent.height;
-                text: "暂未开放";
+                text: I18n.tr("暂未开放", "Not Available Yet", "未公開");
                 color: #eef4fbc8;
                 font-size: 54px;
                 font-weight: 900;

@@ -33,6 +33,6 @@ impl InstallerCore {
 
     /// 日志和设置页展示的载荷来源说明。
     pub fn payload_label(&self) -> &'static str {
-        "内嵌载荷 + ProjectRebound 在线 Nightly"
+        "内嵌载荷 + ProjectRebound/Node.js 在线依赖"
     }
 }

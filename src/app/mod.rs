@@ -9,7 +9,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -19,8 +19,8 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::core::{
-    APP_VERSION, InstallerCore, LaunchMode, MONITORED_PORTS, PathMode, PortConflict,
-    PortStatusRow as CorePortStatusRow, format_port_conflicts,
+    APP_VERSION, InstallProgress, InstallerCore, LaunchMode, MONITORED_PORTS, PathMode,
+    PortConflict, PortStatusRow as CorePortStatusRow, format_port_conflicts,
 };
 use crate::vnt_platform::{VntEvent, VntLaunchOptions, VntSession};
 
@@ -30,6 +30,9 @@ mod controller;
 mod diagnostics;
 mod dialogs;
 mod drive_scan;
+mod font;
+mod i18n;
+mod logging;
 mod messages;
 mod prefs;
 mod server_list;
@@ -41,16 +44,19 @@ mod vnt_controller;
 mod vnt_rows;
 
 use background::spawn_port_thread;
-use diagnostics::{format_process_detection_message, runtime_snapshot_has_any};
+use diagnostics::{
+    format_process_detection_message, runtime_snapshot_has_any, summarize_runtime_processes,
+};
 use prefs::{AppPrefs, VntPrefs};
 use server_list::{RemoteServer, fetch_servers, server_placeholder_row, server_to_row};
 use update::{UpdateCheckResult, check_latest_release, update_dialog_text, update_status_text};
 use vnt_rows::{
-    apply_vnt_idle_to_ui, vnt_peer_to_row, vnt_placeholder_rows, vnt_server_placeholder_rows,
-    vnt_server_to_row,
+    apply_vnt_idle_to_ui, localized_vnt_idle_snapshot, vnt_peer_to_row, vnt_placeholder_rows,
+    vnt_server_placeholder_rows, vnt_server_to_row,
 };
 
 pub(crate) fn run() -> Result<()> {
+    logging::install_log_filter();
     let app = AppWindow::new()?;
     let controller = AppController::new(app)?;
     AppController::bind_callbacks(&controller);
@@ -80,6 +86,7 @@ enum AppMessage {
         automatic: bool,
     },
     VntEvent(VntEvent),
+    InstallProgress(InstallProgress),
     ActionFinished {
         title: String,
         status: String,
@@ -116,6 +123,7 @@ struct AppController {
     tx: Sender<AppMessage>,
     rx: Receiver<AppMessage>,
     stop_background: Arc<AtomicBool>,
+    active_page: Arc<AtomicI32>,
     port_target: Arc<RwLock<Option<PathBuf>>>,
     session_log_file: File,
     mode: PathMode,

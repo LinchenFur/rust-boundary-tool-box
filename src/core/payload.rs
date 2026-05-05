@@ -6,10 +6,11 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Cursor, Read, Write};
 use std::os::windows::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use walkdir::WalkDir;
@@ -18,6 +19,36 @@ use windows::Win32::Storage::FileSystem::{
 };
 use windows::core::PCWSTR;
 use zip::ZipArchive;
+
+use super::filesystem::delete_path;
+use super::util::ensure_dir;
+
+#[derive(Debug, Deserialize)]
+struct NodeRelease {
+    version: String,
+    lts: serde_json::Value,
+    #[serde(default)]
+    files: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct NodeRuntimePackage {
+    pub(crate) source_url: String,
+    pub(crate) version: String,
+    pub(crate) zip_name: String,
+    pub(crate) cache_hit: bool,
+    bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BoundaryMetaServerPackage {
+    pub(crate) source_url: String,
+    pub(crate) zip_name: String,
+    pub(crate) cache_hit: bool,
+    bytes: Vec<u8>,
+}
+
+pub(crate) type DownloadProgress<'a> = &'a dyn Fn(u64, Option<u64>);
 
 #[derive(Debug, Clone)]
 pub(crate) struct ItemStats {
@@ -82,21 +113,344 @@ pub(crate) fn is_project_rebound_online_file(name: &str) -> bool {
         .any(|item| item.eq_ignore_ascii_case(name))
 }
 
+/// Node.js 运行时不再打进 payload，而是在安装时按需下载。
+pub(crate) fn is_nodejs_online_item(name: &str) -> bool {
+    name.eq_ignore_ascii_case(NODEJS_DIR_NAME)
+}
+
+/// 登录服务器目录不再打进 payload，而是在安装时按需从 GitHub 下载。
+pub(crate) fn is_boundary_meta_server_online_item(name: &str) -> bool {
+    name.eq_ignore_ascii_case(BOUNDARY_META_SERVER_DIR_NAME)
+}
+
 /// 下载当前 ProjectRebound Nightly zip。
-pub(crate) fn download_project_rebound_release() -> Result<Vec<u8>> {
-    let response = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(90))
+pub(crate) fn download_project_rebound_release(
+    progress: Option<DownloadProgress<'_>>,
+) -> Result<Vec<u8>> {
+    download_bytes_with_progress(
+        PROJECT_REBOUND_RELEASE_URL,
+        Duration::from_secs(90),
+        progress,
+    )
+    .context("下载 ProjectRebound Nightly Release 失败")
+}
+
+/// 下载 BoundaryMetaServer main 分支源码包。
+pub(crate) fn download_boundary_meta_server(
+    cache_dir: &Path,
+    progress: Option<DownloadProgress<'_>>,
+) -> Result<BoundaryMetaServerPackage> {
+    ensure_dir(cache_dir)?;
+    let zip_name = "BoundaryMetaServer-main.zip".to_string();
+    let zip_path = cache_dir.join(&zip_name);
+    if zip_path.exists() {
+        let bytes = fs::read(&zip_path)
+            .with_context(|| format!("读取 BoundaryMetaServer 缓存失败：{}", zip_path.display()))?;
+        if boundary_meta_server_archive_valid(&bytes) {
+            if let Some(progress) = progress {
+                progress(bytes.len() as u64, Some(bytes.len() as u64));
+            }
+            return Ok(BoundaryMetaServerPackage {
+                source_url: BOUNDARY_META_SERVER_ARCHIVE_URL.to_string(),
+                zip_name,
+                cache_hit: true,
+                bytes,
+            });
+        }
+    }
+
+    let bytes = download_bytes_with_progress(
+        BOUNDARY_META_SERVER_ARCHIVE_URL,
+        Duration::from_secs(180),
+        progress,
+    )
+    .context("下载 BoundaryMetaServer 失败")?;
+    if !boundary_meta_server_archive_valid(&bytes) {
+        bail!("BoundaryMetaServer 压缩包结构无效：缺少 index.js。");
+    }
+    fs::write(&zip_path, &bytes)
+        .with_context(|| format!("写入 BoundaryMetaServer 缓存失败：{}", zip_path.display()))?;
+    Ok(BoundaryMetaServerPackage {
+        source_url: BOUNDARY_META_SERVER_ARCHIVE_URL.to_string(),
+        zip_name,
+        cache_hit: false,
+        bytes,
+    })
+}
+
+/// 下载最新 LTS Node.js Windows zip，并用官方 SHASUMS256 校验。
+pub(crate) fn download_node_runtime(
+    cache_dir: &Path,
+    progress: Option<DownloadProgress<'_>>,
+) -> Result<NodeRuntimePackage> {
+    let release = latest_node_lts_release()?;
+    let arch = node_windows_arch()?;
+    let file_key = format!("win-{arch}-zip");
+    if !release.files.iter().any(|file| file == &file_key) {
+        bail!("Node.js {} 不提供 Windows {} zip。", release.version, arch);
+    }
+    let zip_name = format!("node-{}-win-{}.zip", release.version, arch);
+    let base_url = format!("https://nodejs.org/dist/{}/", release.version);
+    let zip_url = format!("{base_url}{zip_name}");
+    let shasums_url = format!("{base_url}SHASUMS256.txt");
+    let expected_sha = download_text(&shasums_url)
+        .ok()
+        .and_then(|text| parse_shasum_for_file(&text, &zip_name));
+    ensure_dir(cache_dir)?;
+    let zip_path = cache_dir.join(&zip_name);
+
+    if zip_path.exists() {
+        let bytes = fs::read(&zip_path)
+            .with_context(|| format!("读取 Node.js 缓存失败：{}", zip_path.display()))?;
+        if expected_sha
+            .as_deref()
+            .is_none_or(|expected| compute_sha256_bytes(&bytes).eq_ignore_ascii_case(expected))
+        {
+            if let Some(progress) = progress {
+                progress(bytes.len() as u64, Some(bytes.len() as u64));
+            }
+            return Ok(NodeRuntimePackage {
+                source_url: zip_url,
+                version: release.version,
+                zip_name,
+                cache_hit: true,
+                bytes,
+            });
+        }
+    }
+
+    let bytes = download_bytes_with_progress(&zip_url, Duration::from_secs(240), progress)
+        .context("下载 Node.js 运行时失败")?;
+    if let Some(expected) = expected_sha {
+        let actual = compute_sha256_bytes(&bytes);
+        if !actual.eq_ignore_ascii_case(&expected) {
+            bail!("Node.js 运行时校验失败：期望 {expected}，实际 {actual}");
+        }
+    }
+    fs::write(&zip_path, &bytes)
+        .with_context(|| format!("写入 Node.js 缓存失败：{}", zip_path.display()))?;
+    Ok(NodeRuntimePackage {
+        source_url: zip_url,
+        version: release.version,
+        zip_name,
+        cache_hit: false,
+        bytes,
+    })
+}
+
+/// 将 Node.js zip 根目录内的文件解压为目标 nodejs 目录。
+pub(crate) fn extract_node_runtime(package: &NodeRuntimePackage, target_dir: &Path) -> Result<()> {
+    if target_dir.exists() {
+        delete_path(target_dir)?;
+    }
+    fs::create_dir_all(target_dir)?;
+    let mut archive = ZipArchive::new(Cursor::new(package.bytes.as_slice()))
+        .context("无法读取 Node.js 运行时压缩包")?;
+    let root_prefix = format!("node-{}-win-", package.version);
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index)?;
+        let entry_name = entry.name().replace('\\', "/");
+        if entry_name.ends_with('/') {
+            continue;
+        }
+        let relative = entry_name
+            .strip_prefix(&root_prefix)
+            .and_then(|name| name.split_once('/').map(|(_, rest)| rest))
+            .with_context(|| {
+                format!(
+                    "Node.js 运行时压缩包结构不符合预期：{} / {}",
+                    package.zip_name, entry_name
+                )
+            })?;
+        if relative.trim().is_empty() {
+            continue;
+        }
+        let relative_path = Path::new(relative);
+        if !is_safe_relative_path(relative_path) {
+            bail!("Node.js 运行时压缩包包含不安全路径：{relative}");
+        }
+        let out_path = target_dir.join(relative_path);
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut output =
+            File::create(&out_path).with_context(|| format!("创建 {}", out_path.display()))?;
+        io::copy(&mut entry, &mut output)
+            .with_context(|| format!("写入 {}", out_path.display()))?;
+    }
+    if !target_dir.join("node.exe").exists() {
+        bail!("Node.js 运行时安装后未找到 node.exe。");
+    }
+    Ok(())
+}
+
+/// 将 GitHub 源码 zip 解压为目标 BoundaryMetaServer-main 目录。
+pub(crate) fn extract_boundary_meta_server(
+    package: &BoundaryMetaServerPackage,
+    target_dir: &Path,
+) -> Result<()> {
+    if target_dir.exists() {
+        delete_path(target_dir)?;
+    }
+    fs::create_dir_all(target_dir)?;
+    let mut archive = ZipArchive::new(Cursor::new(package.bytes.as_slice()))
+        .context("无法读取 BoundaryMetaServer 压缩包")?;
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index)?;
+        let entry_name = entry.name().replace('\\', "/");
+        if entry.is_dir() || entry_name.ends_with('/') {
+            continue;
+        }
+        let Some(relative_path) = github_archive_relative_path(&entry_name) else {
+            continue;
+        };
+        if !is_safe_relative_path(&relative_path) {
+            bail!("BoundaryMetaServer 压缩包包含不安全路径：{entry_name}");
+        }
+        let out_path = target_dir.join(&relative_path);
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut output =
+            File::create(&out_path).with_context(|| format!("创建 {}", out_path.display()))?;
+        io::copy(&mut entry, &mut output)
+            .with_context(|| format!("写入 {}", out_path.display()))?;
+    }
+    if !target_dir.join("index.js").exists() {
+        bail!("BoundaryMetaServer 安装后未找到 index.js。");
+    }
+    Ok(())
+}
+
+fn is_safe_relative_path(path: &Path) -> bool {
+    path.components()
+        .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+}
+
+fn boundary_meta_server_archive_valid(bytes: &[u8]) -> bool {
+    let Ok(mut archive) = ZipArchive::new(Cursor::new(bytes)) else {
+        return false;
+    };
+    (0..archive.len()).any(|index| {
+        archive.by_index(index).ok().is_some_and(|entry| {
+            github_archive_relative_path(&entry.name().replace('\\', "/")).is_some_and(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("index.js"))
+            })
+        })
+    })
+}
+
+fn github_archive_relative_path(entry_name: &str) -> Option<PathBuf> {
+    let normalized = Path::new(entry_name);
+    let mut components = normalized.components();
+    match components.next()? {
+        Component::Normal(_) => {}
+        _ => return None,
+    }
+    let relative = components.as_path();
+    if relative.as_os_str().is_empty() {
+        None
+    } else {
+        Some(relative.to_path_buf())
+    }
+}
+
+fn latest_node_lts_release() -> Result<NodeRelease> {
+    let text = download_text(NODEJS_DIST_INDEX_URL).context("请求 Node.js 版本索引失败")?;
+    let releases =
+        serde_json::from_str::<Vec<NodeRelease>>(&text).context("解析 Node.js 版本索引失败")?;
+    releases
+        .into_iter()
+        .find(|release| release.lts != serde_json::Value::Bool(false))
+        .context("Node.js 版本索引中没有找到 LTS 版本")
+}
+
+fn node_windows_arch() -> Result<&'static str> {
+    match std::env::consts::ARCH {
+        "x86_64" => Ok("x64"),
+        "aarch64" => Ok("arm64"),
+        "x86" => Ok("x86"),
+        other => bail!("当前架构暂不支持自动下载 Node.js Windows 运行时：{other}"),
+    }
+}
+
+fn parse_shasum_for_file(text: &str, file_name: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let sha = parts.next()?;
+        let name = parts.next()?;
+        if name.eq_ignore_ascii_case(file_name)
+            && sha.len() == 64
+            && sha.chars().all(|ch| ch.is_ascii_hexdigit())
+        {
+            Some(sha.to_string())
+        } else {
+            None
+        }
+    })
+}
+
+fn download_text(url: &str) -> Result<String> {
+    reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
         .user_agent(format!("boundary-toolbox/{}", APP_VERSION))
         .build()?
-        .get(PROJECT_REBOUND_RELEASE_URL)
+        .get(url)
         .send()
-        .context("下载 ProjectRebound Nightly Release 失败")?
+        .with_context(|| format!("请求失败：{url}"))?
         .error_for_status()
-        .context("ProjectRebound Nightly Release 返回错误状态")?;
-    let bytes = response
-        .bytes()
-        .context("读取 ProjectRebound Nightly Release 内容失败")?;
-    Ok(bytes.to_vec())
+        .with_context(|| format!("服务器返回错误：{url}"))?
+        .text()
+        .with_context(|| format!("读取响应失败：{url}"))
+}
+
+fn download_bytes_with_progress(
+    url: &str,
+    timeout: Duration,
+    progress: Option<DownloadProgress<'_>>,
+) -> Result<Vec<u8>> {
+    let mut response = reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .user_agent(format!("boundary-toolbox/{}", APP_VERSION))
+        .build()?
+        .get(url)
+        .send()
+        .with_context(|| format!("请求失败：{url}"))?
+        .error_for_status()
+        .with_context(|| format!("服务器返回错误：{url}"))?;
+    let total = response.content_length();
+    let mut bytes = Vec::with_capacity(total.unwrap_or_default().min(usize::MAX as u64) as usize);
+    let mut downloaded = 0_u64;
+    let mut last_reported = 0_u64;
+    if let Some(progress) = progress {
+        progress(downloaded, total);
+    }
+
+    let mut buffer = [0_u8; 128 * 1024];
+    loop {
+        let read = response
+            .read(&mut buffer)
+            .with_context(|| format!("读取下载内容失败：{url}"))?;
+        if read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..read]);
+        downloaded += read as u64;
+        if let Some(progress) = progress {
+            let finished = total.is_some_and(|total| downloaded >= total);
+            if finished || downloaded.saturating_sub(last_reported) >= 1024 * 1024 {
+                progress(downloaded, total);
+                last_reported = downloaded;
+            }
+        }
+    }
+    if let Some(progress) = progress {
+        if downloaded != last_reported {
+            progress(downloaded, total);
+        }
+    }
+    Ok(bytes)
 }
 
 /// 预检在线 zip，并把所有必需文件读入内存。
@@ -238,6 +592,12 @@ fn compute_file_sha256(path: &Path) -> Result<String> {
         hasher.update(&buffer[..read]);
     }
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn compute_sha256_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
 }
 
 /// 为安装记录采集大小、哈希和文件数量元数据。

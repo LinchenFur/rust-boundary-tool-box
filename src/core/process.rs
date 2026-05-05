@@ -9,6 +9,8 @@ use std::process::Stdio;
 use anyhow::{Context, Result, bail};
 use netstat2::{AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, TcpState, get_sockets_info};
 use sysinfo::System;
+use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
 
 /// 为弹窗和日志生成紧凑的进程摘要字符串。
 pub fn summarize_runtime_processes(snapshot: &RuntimeSnapshot) -> String {
@@ -72,10 +74,24 @@ fn shorten_runtime_detail(value: &str) -> String {
 /// 对多个运行时进程组中的 PID 去重。
 pub(crate) fn runtime_process_pids(snapshot: &RuntimeSnapshot) -> Vec<u32> {
     let mut pids = Vec::new();
-    for group in [&snapshot.game, &snapshot.wrapper, &snapshot.server] {
+    // 先停可能拉起其它进程的包装器/登录服务器，再停游戏本体。
+    for group in [&snapshot.wrapper, &snapshot.server, &snapshot.game] {
         for process in group.iter() {
             if process.pid > 0 && !pids.contains(&process.pid) {
                 pids.push(process.pid);
+            }
+        }
+    }
+    pids
+}
+
+/// 按专用镜像名收集 PID；用于诊断页兜底关闭已脱离目标路径匹配的游戏进程。
+pub(crate) fn runtime_image_pids(image_names: &[&str]) -> Vec<u32> {
+    let mut pids = Vec::new();
+    for image_name in image_names {
+        for pid in process_pids_by_image(image_name) {
+            if pid > 0 && !pids.contains(&pid) {
+                pids.push(pid);
             }
         }
     }
@@ -212,15 +228,120 @@ pub(crate) fn taskkill_pids(pids: &[u32]) -> Result<Vec<String>> {
             .stderr(Stdio::piped())
             .output()
             .with_context(|| format!("结束 PID {} 失败", pid))?;
-        if !output.status.success() {
-            failures.push(format!(
-                "PID {}：{}",
-                pid,
-                taskkill_output_text(&output.stdout, &output.stderr, output.status.code())
-            ));
+
+        if !process_exists(*pid) {
+            continue;
+        }
+
+        match terminate_pid(*pid) {
+            Ok(()) => continue,
+            Err(error) if !process_exists(*pid) => {
+                let _ = error;
+                continue;
+            }
+            Err(error) => {
+                let detail = if output.status.success() {
+                    format!("taskkill 已返回成功，但进程仍在运行；Win32 兜底失败：{error:#}")
+                } else {
+                    format!(
+                        "{}；Win32 兜底失败：{error:#}",
+                        taskkill_output_text(&output.stdout, &output.stderr, output.status.code())
+                    )
+                };
+                failures.push(format!("PID {}：{}", pid, detail));
+            }
         }
     }
     Ok(failures)
+}
+
+/// 按镜像名兜底结束专用游戏进程，处理 PID 刚刷新导致的漏杀。
+pub(crate) fn taskkill_images(image_names: &[&str]) -> Result<Vec<String>> {
+    let mut failures = Vec::new();
+    for image_name in image_names {
+        let output = hidden_taskkill_command()
+            .arg("/IM")
+            .arg(image_name)
+            .arg("/T")
+            .arg("/F")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| format!("结束进程镜像 {} 失败", image_name))?;
+
+        if !process_image_exists(image_name) {
+            continue;
+        }
+
+        let image_pids = process_pids_by_image(image_name);
+        let mut terminate_errors = Vec::new();
+        for pid in image_pids {
+            match terminate_pid(pid) {
+                Ok(()) => {}
+                Err(error) if !process_exists(pid) => {
+                    let _ = error;
+                }
+                Err(error) => terminate_errors.push(format!("PID {}：{error:#}", pid)),
+            }
+        }
+        if !process_image_exists(image_name) {
+            continue;
+        }
+
+        let detail = if output.status.success() {
+            "taskkill 已返回成功，但进程仍在运行".to_string()
+        } else {
+            taskkill_output_text(&output.stdout, &output.stderr, output.status.code())
+        };
+        let fallback = if terminate_errors.is_empty() {
+            String::new()
+        } else {
+            format!("；Win32 兜底失败：{}", terminate_errors.join("；"))
+        };
+        failures.push(format!("{}：{}", image_name, detail + &fallback));
+    }
+    Ok(failures)
+}
+
+fn terminate_pid(pid: u32) -> Result<()> {
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, false, pid)
+            .with_context(|| format!("OpenProcess PID {} 失败", pid))?;
+        let result = TerminateProcess(handle, 1)
+            .with_context(|| format!("TerminateProcess PID {} 失败", pid));
+        let _ = CloseHandle(handle);
+        result
+    }
+}
+
+fn process_exists(pid: u32) -> bool {
+    let mut system = System::new_all();
+    system.refresh_all();
+    system.process(sysinfo::Pid::from_u32(pid)).is_some()
+}
+
+fn process_image_exists(image_name: &str) -> bool {
+    let needle = image_name.to_ascii_lowercase();
+    let mut system = System::new_all();
+    system.refresh_all();
+    system
+        .processes()
+        .values()
+        .any(|process| process.name().to_string_lossy().to_ascii_lowercase() == needle)
+}
+
+fn process_pids_by_image(image_name: &str) -> Vec<u32> {
+    let needle = image_name.to_ascii_lowercase();
+    let mut system = System::new_all();
+    system.refresh_all();
+    system
+        .processes()
+        .iter()
+        .filter_map(|(pid, process)| {
+            (process.name().to_string_lossy().to_ascii_lowercase() == needle)
+                .then_some(pid.as_u32())
+        })
+        .collect()
 }
 
 /// 选择最有用的 taskkill 诊断文本。

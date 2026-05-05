@@ -10,8 +10,14 @@ impl AppController {
         }
 
         self.ui.set_servers_loading(true);
-        self.ui
-            .set_server_status_text("服务器列表：刷新中...".into());
+        self.ui.set_server_status_text(
+            self.tr(
+                "服务器列表：刷新中...",
+                "Server list: refreshing...",
+                "サーバー一覧: 更新中...",
+            )
+            .into(),
+        );
         let tx = self.tx.clone();
         thread::spawn(move || match fetch_servers() {
             Ok(rows) => {

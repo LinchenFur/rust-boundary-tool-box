@@ -1,5 +1,7 @@
+import { I18n } from "i18n.slint";
+
 export component Txt inherits Text {
-    font-family: "Microsoft YaHei UI";
+    font-family: "Maple Mono NF CN";
     letter-spacing: 0px;
 }
 
@@ -149,7 +151,7 @@ export component WindowButton inherits Rectangle {
     Txt {
         text: label;
         color: touch.has-hover && danger ? #ffffff : #c7d1df;
-        font-family: "Segoe UI";
+        font-family: "Maple Mono NF CN";
         font-size: label == "×" ? 20px : 18px;
         font-weight: 600;
         horizontal-alignment: center;
@@ -272,8 +274,82 @@ export component InfoBox inherits Rectangle {
                 color: #eef4fb;
                 font-size: 14px;
                 font-weight: 500;
-                wrap: word-wrap;
+                wrap: char-wrap;
             }
+        }
+    }
+}
+
+// 安装过程的线性进度和当前步骤明细。
+export component ProgressBox inherits Rectangle {
+    in property <bool> shown: false;
+    in property <float> progress: 0.0;
+    in property <string> percent: "0%";
+    in property <string> title: "";
+    in property <string> detail: "";
+
+    height: shown ? 104px : 0px;
+    border-radius: 14px;
+    border-width: shown ? 1px : 0px;
+    border-color: #273041;
+    background: shown ? #0f131a : #00000000;
+    clip: true;
+
+    if shown : VerticalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 9px;
+
+        HorizontalLayout {
+            height: 20px;
+            spacing: 12px;
+
+            Txt {
+                text: title;
+                color: #eef4fb;
+                font-size: 13px;
+                font-weight: 800;
+                horizontal-stretch: 1;
+                wrap: no-wrap;
+            }
+
+            Txt {
+                width: 54px;
+                text: percent;
+                color: #62e2c1;
+                font-size: 12px;
+                font-weight: 800;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                wrap: no-wrap;
+            }
+        }
+
+        Rectangle {
+            height: 12px;
+            border-radius: 6px;
+            background: #1a2432;
+            clip: true;
+
+            Rectangle {
+                x: 0px;
+                height: parent.height;
+                width: parent.width * progress;
+                border-radius: 6px;
+                background: #62e2c1;
+
+                animate width { duration: 160ms; easing: ease-out; }
+            }
+        }
+
+        Txt {
+            text: detail;
+            color: #aebbd0;
+            font-size: 12px;
+            font-weight: 600;
+            wrap: char-wrap;
         }
     }
 }
@@ -333,7 +409,7 @@ export component TextField inherits Rectangle {
         color: root.enabled ? #eef4fb : #687589;
         selection-background-color: #62e2c1;
         selection-foreground-color: #08231d;
-        font-family: "Microsoft YaHei UI";
+        font-family: "Maple Mono NF CN";
         font-size: 14px;
         font-weight: 500;
         letter-spacing: 0px;
@@ -370,7 +446,7 @@ export component ServerDropdown inherits Rectangle {
             y: 0px;
             width: parent.width - 54px;
             height: parent.height;
-            text: value == "" ? "选择服务器地址" : value;
+            text: value == "" ? I18n.tr("选择服务器地址", "Select server address", "サーバーアドレスを選択") : value;
             color: value == "" ? #77849a : #eef4fb;
             font-size: 14px;
             font-weight: 600;
@@ -499,7 +575,7 @@ export component DetailRow inherits Rectangle {
                 color: #eef4fb;
                 font-size: 13px;
                 font-weight: 500;
-                wrap: word-wrap;
+                wrap: char-wrap;
                 horizontal-stretch: 1;
             }
         }

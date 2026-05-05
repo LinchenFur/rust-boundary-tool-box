@@ -10,7 +10,14 @@ impl AppController {
         }
         let drives = self.core.list_available_drives();
         if drives.is_empty() {
-            self.show_error_dialog("全盘扫描", "未找到可扫描的盘符。");
+            self.show_error_dialog(
+                self.tr("全盘扫描", "Full Scan", "全体スキャン"),
+                self.tr(
+                    "未找到可扫描的盘符。",
+                    "No drives are available to scan.",
+                    "スキャン可能なドライブが見つかりません。",
+                ),
+            );
             return;
         }
 
@@ -48,7 +55,14 @@ impl AppController {
     pub(super) fn start_drive_scan(&mut self) {
         let drives = self.selected_drives();
         if drives.is_empty() {
-            self.show_error_dialog("全盘扫描", "请至少选择一个盘符。");
+            self.show_error_dialog(
+                self.tr("全盘扫描", "Full Scan", "全体スキャン"),
+                self.tr(
+                    "请至少选择一个盘符。",
+                    "Select at least one drive.",
+                    "少なくとも 1 つのドライブを選択してください。",
+                ),
+            );
             return;
         }
         if self.ui.get_busy() {
@@ -56,7 +70,10 @@ impl AppController {
         }
 
         self.ui.set_busy(true);
-        self.ui.set_status_text("全盘扫描中...".into());
+        self.ui.set_status_text(
+            self.tr("全盘扫描中...", "Running full scan...", "全体スキャン中...")
+                .into(),
+        );
         self.append_log(&format!(
             "[{}] 开始全盘扫描：{}",
             core::now_text(),
@@ -69,12 +86,32 @@ impl AppController {
 
         let core = self.core.clone();
         let tx = self.tx.clone();
+        let language = self.language();
         thread::spawn(move || {
             let result = core.scan_drives_for_game(&drives);
             let dialog = result
                 .as_ref()
-                .map(|path| format!("已通过全盘扫描找到游戏目录：{}", path.display()))
-                .unwrap_or_else(|| "在所选盘符中未找到 Boundary 游戏目录。".to_string());
+                .map(|path| {
+                    format!(
+                        "{}{}",
+                        i18n::tr(
+                            language,
+                            "已通过全盘扫描找到游戏目录：",
+                            "Game path found by full scan: ",
+                            "全体スキャンでゲームディレクトリを見つけました: ",
+                        ),
+                        path.display()
+                    )
+                })
+                .unwrap_or_else(|| {
+                    i18n::tr(
+                        language,
+                        "在所选盘符中未找到 Boundary 游戏目录。",
+                        "Boundary game path was not found on the selected drives.",
+                        "選択したドライブに Boundary のゲームディレクトリは見つかりませんでした。",
+                    )
+                    .to_string()
+                });
             let _ = tx.send(AppMessage::ScanFinished { result, dialog });
         });
     }

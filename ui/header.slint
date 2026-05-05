@@ -1,4 +1,5 @@
 import { NavTab, Panel, StatusTag, Txt } from "components.slint";
+import { I18n } from "i18n.slint";
 
 export component ShellHeader inherits Rectangle {
     in-out property <int> page;
@@ -20,13 +21,13 @@ export component ShellHeader inherits Rectangle {
                     Txt {
                         text: "BOUNDARY";
                         color: #eef4fb;
-                        font-family: "Segoe UI";
+                        font-family: "Maple Mono NF CN";
                         font-size: 25px;
                         font-weight: 800;
                     }
 
                     Txt {
-                        text: "社区服工具箱";
+                        text: I18n.tr("社区服工具箱", "Community Toolbox", "コミュニティツール");
                         color: #95a3b8;
                         font-size: 13px;
                         font-weight: 700;
@@ -36,42 +37,42 @@ export component ShellHeader inherits Rectangle {
 
             NavTab {
                 width: 112px;
-                label: "启动";
+                label: I18n.tr("启动", "Launch", "起動");
                 selected: page == 0;
                 clicked => { root.page = 0; }
             }
 
             NavTab {
                 width: 112px;
-                label: "目录";
+                label: I18n.tr("目录", "Path", "パス");
                 selected: page == 1;
                 clicked => { root.page = 1; }
             }
 
             NavTab {
                 width: 112px;
-                label: "诊断";
+                label: I18n.tr("诊断", "Diagnostics", "診断");
                 selected: page == 2;
                 clicked => { root.page = 2; }
             }
 
             NavTab {
                 width: 112px;
-                label: "联机";
+                label: I18n.tr("联机", "Network", "ネットワーク");
                 selected: page == 5;
                 clicked => { root.page = 5; }
             }
 
             NavTab {
                 width: 112px;
-                label: "服务器";
+                label: I18n.tr("服务器", "Servers", "サーバー");
                 selected: page == 4;
                 clicked => { root.page = 4; }
             }
 
             NavTab {
                 width: 112px;
-                label: "设置";
+                label: I18n.tr("设置", "Settings", "設定");
                 selected: page == 3;
                 clicked => { root.page = 3; }
             }
@@ -79,8 +80,10 @@ export component ShellHeader inherits Rectangle {
             Rectangle { horizontal-stretch: 1; background: #00000000; }
 
             StatusTag {
-                title: has_target ? "READY" : "WAIT";
-                sub: has_target ? "目标目录已锁定" : "等待目标目录";
+                title: has_target ? I18n.tr("就绪", "READY", "準備完了") : I18n.tr("等待", "WAIT", "待機");
+                sub: has_target
+                    ? I18n.tr("目标目录已锁定", "Target path locked", "対象パス設定済み")
+                    : I18n.tr("等待目标目录", "Waiting for target", "対象パス待ち");
                 accent: has_target ? #9ef0b5 : #f6c76d;
                 opacity: has_target ? 1.0 : (pulse ? 0.72 : 1.0);
             }

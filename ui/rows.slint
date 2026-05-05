@@ -1,4 +1,5 @@
 import { Txt } from "components.slint";
+import { I18n } from "i18n.slint";
 
 export component PortLine inherits Rectangle {
     in property <string> label;
@@ -81,7 +82,7 @@ export component PortLine inherits Rectangle {
                     animate border-color { duration: 120ms; }
 
                     Txt {
-                        text: "关闭进程";
+                        text: I18n.tr("关闭进程", "Stop Process", "プロセス停止");
                         color: !busy ? status-text : #657285;
                         font-size: 11px;
                         font-weight: 800;
@@ -97,7 +98,7 @@ export component PortLine inherits Rectangle {
             }
 
             if !occupied || pid <= 0 : Txt {
-                text: occupied ? "占用" : "空闲";
+                text: occupied ? I18n.tr("占用", "Busy", "使用中") : I18n.tr("空闲", "Free", "空き");
                 min-width: 52px;
                 color: status-accent;
                 font-size: 12px;
@@ -251,7 +252,7 @@ export component DriveLine inherits Rectangle {
                 }
 
                 Txt {
-                    text: checked ? "已选择" : "未选择";
+                    text: checked ? I18n.tr("已选择", "Selected", "選択済み") : I18n.tr("未选择", "Not selected", "未選択");
                     color: checked ? #9ef0b5 : #95a3b8;
                     font-size: 11px;
                     font-weight: 500;
@@ -336,7 +337,7 @@ export component VntPeerLine inherits Rectangle {
                 background: online ? #163b25 : #101721;
 
                 Txt {
-                    text: online ? "在线" : "等待";
+                    text: online ? I18n.tr("在线", "Online", "オンライン") : I18n.tr("等待", "Waiting", "待機中");
                     color: online ? #9ef0b5 : #95a3b8;
                     font-size: 12px;
                     font-weight: 800;
@@ -427,7 +428,7 @@ export component VntServerLine inherits Rectangle {
                 background: online ? #163b25 : #101721;
 
                 Txt {
-                    text: online ? "在线" : "离线";
+                    text: online ? I18n.tr("在线", "Online", "オンライン") : I18n.tr("离线", "Offline", "オフライン");
                     color: online ? #9ef0b5 : #95a3b8;
                     font-size: 12px;
                     font-weight: 800;

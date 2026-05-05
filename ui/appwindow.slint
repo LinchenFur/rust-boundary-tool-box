@@ -10,14 +10,16 @@ import { VntPage } from "pages/vnt_page.slint";
 import { SettingsPage } from "pages/settings_page.slint";
 import { ServersPage } from "pages/servers_page.slint";
 import { ShellHeader } from "header.slint";
-import { AppDialog, DriveScanDialog } from "dialogs.slint";
+import { AppDialog, DriveScanDialog, InstallProgressDialog } from "dialogs.slint";
 import { Txt, WindowButton } from "components.slint";
+import { I18n } from "i18n.slint";
 
 export component AppWindow inherits Window {
-    title: "边境社区服工具箱";
+    title: I18n.tr("边境社区服工具箱", "Boundary Community Toolbox", "Boundary コミュニティツール");
     width: 1260px;
     height: 780px;
     background: #0b0e13;
+    default-font-family: "Maple Mono NF CN";
     no-frame: true;
     resize-border-width: 6px;
 
@@ -26,16 +28,21 @@ export component AppWindow inherits Window {
 
     // 启动页和目录页共享的目录/安装状态。
     in-out property <string> payload_label: "";
-    in-out property <string> detected_text: "正在检测 Steam 安装目录...";
+    in-out property <string> detected_text: I18n.tr("正在检测 Steam 安装目录...", "Detecting Steam install path...", "Steam のインストール先を検出中...");
     in-out property <string> manual_path: "";
-    in-out property <string> target_text: "未解析到有效的安装目录";
+    in-out property <string> target_text: I18n.tr("未解析到有效的安装目录", "No valid install path resolved", "有効なインストール先が見つかりません");
     in-out property <bool> auto_mode: true;
-    in-out property <string> status_text: "准备就绪";
-    in-out property <string> process_status_text: "运行进程：未检测";
+    in-out property <string> status_text: I18n.tr("准备就绪", "Ready", "準備完了");
+    in-out property <string> process_status_text: I18n.tr("运行进程：未检测", "Runtime processes: not checked", "実行中プロセス: 未確認");
     in-out property <bool> show_logs: false;
     in-out property <string> log_text: "";
     in-out property <bool> busy: false;
     in-out property <bool> pulse: false;
+    in-out property <bool> install_progress_visible: false;
+    in-out property <float> install_progress_value: 0.0;
+    in-out property <string> install_progress_percent: "0%";
+    in-out property <string> install_progress_title: "";
+    in-out property <string> install_progress_detail: "";
     in-out property <bool> show_drive_dialog: false;
     in-out property <bool> show_app_dialog: false;
     in-out property <bool> app_dialog_confirm: false;
@@ -44,15 +51,15 @@ export component AppWindow inherits Window {
     in-out property <string> app_dialog_title: "";
     in-out property <string> app_dialog_text: "";
     in-out property <string> app_dialog_input_text: "";
-    in-out property <string> app_dialog_primary_text: "确定";
-    in-out property <string> app_dialog_secondary_text: "取消";
+    in-out property <string> app_dialog_primary_text: I18n.tr("确定", "OK", "OK");
+    in-out property <string> app_dialog_secondary_text: I18n.tr("取消", "Cancel", "キャンセル");
     in-out property <bool> has_target: false;
 
     // 远程社区服列表状态。
     in-out property <bool> servers_loading: false;
-    in-out property <string> server_status_text: "服务器列表：未刷新";
+    in-out property <string> server_status_text: I18n.tr("服务器列表：未刷新", "Server list: not refreshed", "サーバー一覧: 未更新");
     in-out property <bool> update_checking: false;
-    in-out property <string> update_status_text: "更新：未检查";
+    in-out property <string> update_status_text: I18n.tr("更新：未检查", "Update: not checked", "更新: 未確認");
 
     // 用于 VNT 联机的状态和选项。
     in-out property <string> vnt_server_text: "101.35.230.139:6660";
@@ -65,13 +72,14 @@ export component AppWindow inherits Window {
     in-out property <bool> vnt_rtx: false;
     in-out property <bool> vnt_busy: false;
     in-out property <bool> vnt_running: false;
-    in-out property <string> vnt_status_text: "未连接";
-    in-out property <string> vnt_detail_text: "填写网络编号后启动联机平台";
+    in-out property <string> vnt_status_text: I18n.tr("未连接", "Disconnected", "未接続");
+    in-out property <string> vnt_detail_text: I18n.tr("填写网络编号后启动联机平台", "Enter a network code before starting", "ネットワーク番号を入力してから起動してください");
     in-out property <string> vnt_ip_text: "-";
     in-out property <string> vnt_server_status_text: "-";
     in-out property <string> vnt_nat_text: "-";
-    in-out property <string> vnt_peer_summary_text: "0 个节点";
+    in-out property <string> vnt_peer_summary_text: I18n.tr("0 个节点", "0 peers", "0 ノード");
     in-out property <[VntServerRow]> vnt_server_rows;
+    in-out property <int> language: 0;
 
     // 列表模型由 Rust 持有并原地更新。
     in-out property <[PortRow]> port_rows;
@@ -106,6 +114,8 @@ export component AppWindow inherits Window {
     callback vnt_add_server_clicked(address: string);
     callback vnt_settings_changed();
     callback toggle_logs_clicked();
+    callback page_changed(page: int);
+    callback language_changed(language: int);
 
     // 自定义弹窗回调。
     callback drive_toggled(index: int, checked: bool);
@@ -113,9 +123,13 @@ export component AppWindow inherits Window {
     callback drive_cancelled();
     callback app_dialog_primary();
     callback app_dialog_secondary();
+    callback install_progress_closed();
     callback window_drag_started();
     callback window_minimize_clicked();
     callback window_close_clicked();
+
+    changed page => { root.page_changed(root.page); }
+    changed language => { I18n.language = root.language; }
 
     Rectangle {
         width: parent.width;
@@ -158,7 +172,7 @@ export component AppWindow inherits Window {
                         background: #00000000;
 
                         Txt {
-                            text: "边境社区服工具箱";
+                            text: I18n.tr("边境社区服工具箱", "Boundary Community Toolbox", "Boundary コミュニティツール");
                             color: #c7d1df;
                             font-size: 13px;
                             font-weight: 700;
@@ -200,109 +214,128 @@ export component AppWindow inherits Window {
                 vertical-stretch: 1;
                 background: #00000000;
 
-            if page == 0 : StartPage {
-                width: parent.width;
-                height: parent.height;
-                has_target: root.has_target;
-                busy: root.busy;
-                auto_mode: root.auto_mode;
-                status_text: root.status_text;
-                target_text: root.target_text;
-                detected_text: root.detected_text;
-                launch_pvp_clicked => { root.launch_pvp_clicked(); }
-                launch_pve_clicked => { root.launch_pve_clicked(); }
-                install_clicked => { root.install_clicked(); }
-                uninstall_clicked => { root.uninstall_clicked(); }
-                scan_clicked => { root.scan_clicked(); }
-                goto_directory => { root.page = 1; }
-            }
-
-            if page == 1 : DirectoryPage {
-                width: parent.width;
-                height: parent.height;
-                has_target: root.has_target;
-                busy: root.busy;
-                auto_mode: root.auto_mode;
-                manual_path: root.manual_path;
-                detected_text: root.detected_text;
-                target_text: root.target_text;
-                auto_mode_clicked => { root.auto_mode_clicked(); }
-                manual_mode_clicked => { root.manual_mode_clicked(); }
-                scan_clicked => { root.scan_clicked(); }
-                redetect_clicked => { root.redetect_clicked(); }
-                browse_clicked => { root.browse_clicked(); }
-                manual_path_changed(text) => { root.manual_path_changed(text); }
-            }
-
-            if page == 2 : DiagnosticsPage {
-                width: parent.width;
-                height: parent.height;
-                has_target: root.has_target;
-                busy: root.busy;
-                show_logs: root.show_logs;
-                process_status_text: root.process_status_text;
-                log_text: root.log_text;
-                port_rows: root.port_rows;
-                detect_processes_clicked => { root.detect_processes_clicked(); }
-                stop_processes_clicked => { root.stop_processes_clicked(); }
-                stop_port_process_clicked(protocol, port, pid) => {
-                    root.stop_port_process_clicked(protocol, port, pid);
+                StartPage {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.page == 0;
+                    has_target: root.has_target;
+                    busy: root.busy;
+                    auto_mode: root.auto_mode;
+                    status_text: root.status_text;
+                    target_text: root.target_text;
+                    detected_text: root.detected_text;
+                    launch_pvp_clicked => { root.launch_pvp_clicked(); }
+                    launch_pve_clicked => { root.launch_pve_clicked(); }
+                    install_clicked => { root.install_clicked(); }
+                    uninstall_clicked => { root.uninstall_clicked(); }
+                    scan_clicked => { root.scan_clicked(); }
+                    goto_directory => { root.page = 1; }
                 }
-                toggle_logs_clicked => { root.toggle_logs_clicked(); }
-            }
 
-            if page == 5 : VntPage {
-                width: parent.width;
-                height: parent.height;
-                vnt_server_text <=> root.vnt_server_text;
-                vnt_new_server_text <=> root.vnt_new_server_text;
-                vnt_server_options: root.vnt_server_options;
-                vnt_network_code <=> root.vnt_network_code;
-                vnt_password <=> root.vnt_password;
-                vnt_no_tun <=> root.vnt_no_tun;
-                vnt_compress <=> root.vnt_compress;
-                vnt_rtx <=> root.vnt_rtx;
-                vnt_busy: root.vnt_busy;
-                vnt_running: root.vnt_running;
-                vnt_status_text: root.vnt_status_text;
-                vnt_detail_text: root.vnt_detail_text;
-                vnt_ip_text: root.vnt_ip_text;
-                vnt_server_status_text: root.vnt_server_status_text;
-                vnt_nat_text: root.vnt_nat_text;
-                vnt_peer_summary_text: root.vnt_peer_summary_text;
-                vnt_server_rows: root.vnt_server_rows;
-                vnt_peer_rows: root.vnt_peer_rows;
-                vnt_start_clicked => { root.vnt_start_clicked(); }
-                vnt_stop_clicked => { root.vnt_stop_clicked(); }
-                vnt_refresh_clicked => { root.vnt_refresh_clicked(); }
-                vnt_add_server_clicked(address) => { root.vnt_add_server_clicked(address); }
-                vnt_settings_changed => { root.vnt_settings_changed(); }
-            }
+                DirectoryPage {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.page == 1;
+                    has_target: root.has_target;
+                    busy: root.busy;
+                    auto_mode: root.auto_mode;
+                    manual_path: root.manual_path;
+                    detected_text: root.detected_text;
+                    target_text: root.target_text;
+                    auto_mode_clicked => { root.auto_mode_clicked(); }
+                    manual_mode_clicked => { root.manual_mode_clicked(); }
+                    scan_clicked => { root.scan_clicked(); }
+                    redetect_clicked => { root.redetect_clicked(); }
+                    browse_clicked => { root.browse_clicked(); }
+                    manual_path_changed(text) => { root.manual_path_changed(text); }
+                }
 
-            if page == 3 : SettingsPage {
-                width: parent.width;
-                height: parent.height;
-                busy: root.busy;
-                has_target: root.has_target;
-                status_text: root.status_text;
-                target_text: root.target_text;
-                process_status_text: root.process_status_text;
-                server_status_text: root.server_status_text;
-                update_checking: root.update_checking;
-                update_status_text: root.update_status_text;
-                open_logs_clicked => { root.open_logs_clicked(); }
-                check_updates_clicked => { root.check_updates_clicked(); }
-            }
+                DiagnosticsPage {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.page == 2;
+                    has_target: root.has_target;
+                    busy: root.busy;
+                    show_logs: root.page == 2 && root.show_logs;
+                    process_status_text: root.process_status_text;
+                    log_text: root.page == 2 && root.show_logs ? root.log_text : "";
+                    port_rows: root.page == 2 ? root.port_rows : [];
+                    detect_processes_clicked => { root.detect_processes_clicked(); }
+                    stop_processes_clicked => { root.stop_processes_clicked(); }
+                    stop_port_process_clicked(protocol, port, pid) => {
+                        root.stop_port_process_clicked(protocol, port, pid);
+                    }
+                    toggle_logs_clicked => { root.toggle_logs_clicked(); }
+                }
 
-            if page == 4 : ServersPage {
-                width: parent.width;
-                height: parent.height;
-                servers_loading: root.servers_loading;
-                server_status_text: root.server_status_text;
-                server_rows: root.server_rows;
-                refresh_servers_clicked => { root.refresh_servers_clicked(); }
+                VntPage {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.page == 5;
+                    vnt_server_text <=> root.vnt_server_text;
+                    vnt_new_server_text <=> root.vnt_new_server_text;
+                    vnt_server_options: root.vnt_server_options;
+                    vnt_network_code <=> root.vnt_network_code;
+                    vnt_password <=> root.vnt_password;
+                    vnt_no_tun <=> root.vnt_no_tun;
+                    vnt_compress <=> root.vnt_compress;
+                    vnt_rtx <=> root.vnt_rtx;
+                    vnt_busy: root.vnt_busy;
+                    vnt_running: root.vnt_running;
+                    vnt_status_text: root.vnt_status_text;
+                    vnt_detail_text: root.vnt_detail_text;
+                    vnt_ip_text: root.vnt_ip_text;
+                    vnt_server_status_text: root.vnt_server_status_text;
+                    vnt_nat_text: root.vnt_nat_text;
+                    vnt_peer_summary_text: root.vnt_peer_summary_text;
+                    vnt_server_rows: root.page == 5 ? root.vnt_server_rows : [];
+                    vnt_peer_rows: root.page == 5 ? root.vnt_peer_rows : [];
+                    vnt_start_clicked => { root.vnt_start_clicked(); }
+                    vnt_stop_clicked => { root.vnt_stop_clicked(); }
+                    vnt_refresh_clicked => { root.vnt_refresh_clicked(); }
+                    vnt_add_server_clicked(address) => { root.vnt_add_server_clicked(address); }
+                    vnt_settings_changed => { root.vnt_settings_changed(); }
+                }
+
+                SettingsPage {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.page == 3;
+                    busy: root.busy;
+                    has_target: root.has_target;
+                    status_text: root.status_text;
+                    target_text: root.target_text;
+                    process_status_text: root.process_status_text;
+                    server_status_text: root.server_status_text;
+                    update_checking: root.update_checking;
+                    update_status_text: root.update_status_text;
+                    language: root.language;
+                    open_logs_clicked => { root.open_logs_clicked(); }
+                    check_updates_clicked => { root.check_updates_clicked(); }
+                    language_changed(language) => { root.language_changed(language); }
+                }
+
+                ServersPage {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.page == 4;
+                    servers_loading: root.servers_loading;
+                    server_status_text: root.server_status_text;
+                    server_rows: root.page == 4 ? root.server_rows : [];
+                    refresh_servers_clicked => { root.refresh_servers_clicked(); }
+                }
             }
-            }
+        }
+
+        if install_progress_visible : InstallProgressDialog {
+            width: parent.width;
+            height: parent.height;
+            busy: root.busy;
+            progress: root.install_progress_value;
+            percent: root.install_progress_percent;
+            title: root.install_progress_title;
+            detail: root.install_progress_detail;
+            close_clicked => { root.install_progress_closed(); }
         }
 
         if show_drive_dialog : DriveScanDialog {

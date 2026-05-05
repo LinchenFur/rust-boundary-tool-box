@@ -2,6 +2,7 @@ import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
 import { PortRow, ServerRow, VntPeerRow } from "../models.slint";
 import { Action, DetailRow, InfoBox, InputBox, NavTab, OptionSwitch, Panel, TitleBlock, Txt } from "../components.slint";
 import { PortLine, ServerLine, VntPeerLine } from "../rows.slint";
+import { I18n } from "../i18n.slint";
 
 export component DirectoryPage inherits Rectangle {
     in property <bool> has_target;
@@ -32,33 +33,33 @@ export component DirectoryPage inherits Rectangle {
                     spacing: 16px;
 
                     TitleBlock {
-                        title: "识别方式";
-                        sub: "选择自动识别或手动指定目录";
+                        title: I18n.tr("识别方式", "Path Mode", "パス指定方式");
+                        sub: I18n.tr("选择自动识别或手动指定目录", "Use auto detection or choose a path manually", "自動検出または手動指定を選択");
                     }
 
                     NavTab {
-                        label: "自动识别";
+                        label: I18n.tr("自动识别", "Auto Detect", "自動検出");
                         selected: auto_mode;
                         clicked => { root.auto_mode_clicked(); }
                     }
 
                     NavTab {
-                        label: "手动选择";
+                        label: I18n.tr("手动选择", "Manual", "手動選択");
                         selected: !auto_mode;
                         clicked => { root.manual_mode_clicked(); }
                     }
 
                     Action {
-                        label: "全盘扫描";
-                        sub: "选择盘符后扫描";
+                        label: I18n.tr("全盘扫描", "Full Scan", "全体スキャン");
+                        sub: I18n.tr("选择盘符后扫描", "Select drives before scanning", "ドライブを選択してスキャン");
                         enabled: !busy;
                         accent: #9ef0b5;
                         clicked => { root.scan_clicked(); }
                     }
 
                     Action {
-                        label: "重新检测";
-                        sub: "刷新自动识别结果";
+                        label: I18n.tr("重新检测", "Re-detect", "再検出");
+                        sub: I18n.tr("刷新自动识别结果", "Refresh auto detection", "自動検出結果を更新");
                         enabled: auto_mode && !busy;
                         accent: #a8d8ff;
                         clicked => { root.redetect_clicked(); }
@@ -76,8 +77,8 @@ export component DirectoryPage inherits Rectangle {
                     spacing: 16px;
 
                     TitleBlock {
-                        title: "游戏根目录";
-                        sub: "手动模式下可直接输入或浏览目录";
+                        title: I18n.tr("游戏根目录", "Game Root", "ゲームルート");
+                        sub: I18n.tr("手动模式下可直接输入或浏览目录", "Enter or browse a path in manual mode", "手動モードで入力または参照できます");
                     }
 
                     InputBox {
@@ -90,8 +91,8 @@ export component DirectoryPage inherits Rectangle {
                             height: parent.height - 16px;
                             text: manual_path;
                             enabled: !auto_mode && !busy;
-                            placeholder-text: "游戏根目录";
-                            font-family: "Microsoft YaHei UI";
+                            placeholder-text: I18n.tr("游戏根目录", "Game root", "ゲームルート");
+                            font-family: "Maple Mono NF CN";
                             font-size: 14px;
                             edited(text) => { root.manual_path_changed(text); }
                         }
@@ -103,8 +104,8 @@ export component DirectoryPage inherits Rectangle {
 
                         Action {
                             width: 150px;
-                            label: "浏览";
-                            sub: "OPEN";
+                            label: I18n.tr("浏览", "Browse", "参照");
+                            sub: I18n.tr("打开", "OPEN", "開く");
                             enabled: !auto_mode && !busy;
                             accent: #62e2c1;
                             clicked => { root.browse_clicked(); }
@@ -115,14 +116,14 @@ export component DirectoryPage inherits Rectangle {
 
                     InfoBox {
                         box-height: 128px;
-                        label: "DETECTED";
+                        label: I18n.tr("检测结果", "DETECTED", "検出結果");
                         value: detected_text;
                         accent: #a8d8ff;
                     }
 
                     InfoBox {
                         box-height: 120px;
-                        label: "TARGET";
+                        label: I18n.tr("目标", "TARGET", "対象");
                         value: target_text;
                         accent: has_target ? #9ef0b5 : #f6c76d;
                     }

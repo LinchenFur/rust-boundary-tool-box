@@ -81,29 +81,78 @@ pub(crate) fn check_latest_release() -> Result<UpdateCheckResult> {
 }
 
 /// 设置页紧凑状态文本。
-pub(crate) fn update_status_text(result: &UpdateCheckResult) -> String {
+pub(crate) fn update_status_text(result: &UpdateCheckResult, language: i32) -> String {
     if result.is_newer {
-        format!("发现新版本：v{}", result.latest_version)
+        format!(
+            "{}v{}",
+            crate::app::i18n::tr(
+                language,
+                "发现新版本：",
+                "New version: v",
+                "新バージョン: v"
+            ),
+            result.latest_version
+        )
     } else {
-        format!("已是最新：v{APP_VERSION}")
+        format!(
+            "{}v{APP_VERSION}",
+            crate::app::i18n::tr(language, "已是最新：", "Up to date: v", "最新版です: v")
+        )
     }
 }
 
 /// 弹窗详细文本。
-pub(crate) fn update_dialog_text(result: &UpdateCheckResult) -> String {
-    let download = result
-        .asset_url
-        .as_deref()
-        .unwrap_or("该 Release 未提供 boundary_toolbox.exe 资产");
+pub(crate) fn update_dialog_text(result: &UpdateCheckResult, language: i32) -> String {
+    let download = result.asset_url.as_deref().unwrap_or(crate::app::i18n::tr(
+        language,
+        "该 Release 未提供 boundary_toolbox.exe 资产",
+        "This release does not include a boundary_toolbox.exe asset",
+        "この Release には boundary_toolbox.exe が含まれていません",
+    ));
     if result.is_newer {
         format!(
-            "发现新版本：{}\n当前版本：v{}\n发布时间：{}\n\n{}\n\n下载地址：{}",
-            result.latest_tag, APP_VERSION, result.published_at, result.release_name, download
+            "{}{}\n{}v{}\n{}{}\n\n{}\n\n{}{}",
+            crate::app::i18n::tr(language, "发现新版本：", "New version: ", "新バージョン: "),
+            result.latest_tag,
+            crate::app::i18n::tr(
+                language,
+                "当前版本：",
+                "Current version: ",
+                "現在のバージョン: "
+            ),
+            APP_VERSION,
+            crate::app::i18n::tr(language, "发布时间：", "Published: ", "公開日時: "),
+            result.published_at,
+            result.release_name,
+            crate::app::i18n::tr(language, "下载地址：", "Download: ", "ダウンロード: "),
+            download
         )
     } else {
         format!(
-            "当前已经是最新版本。\n当前版本：v{}\n最新 Release：{}\n发布时间：{}\n\n{}",
-            APP_VERSION, result.latest_tag, result.published_at, result.release_url
+            "{}\n{}v{}\n{}{}\n{}{}\n\n{}",
+            crate::app::i18n::tr(
+                language,
+                "当前已经是最新版本。",
+                "You are already on the latest version.",
+                "現在のバージョンは最新版です。",
+            ),
+            crate::app::i18n::tr(
+                language,
+                "当前版本：",
+                "Current version: ",
+                "現在のバージョン: "
+            ),
+            APP_VERSION,
+            crate::app::i18n::tr(
+                language,
+                "最新 Release：",
+                "Latest release: ",
+                "最新 Release: "
+            ),
+            result.latest_tag,
+            crate::app::i18n::tr(language, "发布时间：", "Published: ", "公開日時: "),
+            result.published_at,
+            result.release_url
         )
     }
 }

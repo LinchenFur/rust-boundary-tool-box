@@ -5,13 +5,13 @@ use super::*;
 impl AppController {
     /// 显示非错误应用内弹窗。
     pub(super) fn show_info_dialog(&mut self, title: &str, text: &str) {
-        self.show_app_dialog(title, text, "确定", "", false, false);
+        self.show_app_dialog(title, text, self.tr("确定", "OK", "OK"), "", false, false);
         self.pending_dialog_action = PendingDialogAction::None;
     }
 
     /// 显示错误应用内弹窗。
     pub(super) fn show_error_dialog(&mut self, title: &str, text: &str) {
-        self.show_app_dialog(title, text, "确定", "", false, true);
+        self.show_app_dialog(title, text, self.tr("确定", "OK", "OK"), "", false, true);
         self.pending_dialog_action = PendingDialogAction::None;
     }
 
@@ -31,10 +31,14 @@ impl AppController {
     /// 显示应用内手动路径输入弹窗。
     pub(super) fn show_path_dialog(&mut self, initial: &str) {
         self.show_app_dialog(
-            "选择游戏根目录",
-            "输入或粘贴 Boundary 游戏根目录。可以填写游戏根目录，也可以填写 Binaries\\Win64 目录。",
-            "应用路径",
-            "取消",
+            self.tr("选择游戏根目录", "Select Game Root", "ゲームルートを選択"),
+            self.tr(
+                "输入或粘贴 Boundary 游戏根目录。可以填写游戏根目录，也可以填写 Binaries\\Win64 目录。",
+                "Enter or paste the Boundary game root. You can use the game root or the Binaries\\Win64 folder.",
+                "Boundary のゲームルートを入力または貼り付けてください。ゲームルートまたは Binaries\\Win64 フォルダーを指定できます。",
+            ),
+            self.tr("应用路径", "Apply Path", "パスを適用"),
+            self.tr("取消", "Cancel", "キャンセル"),
             false,
             false,
         );
@@ -92,8 +96,14 @@ impl AppController {
     /// 处理弹窗取消动作，并应用取消侧的状态变化。
     pub(super) fn handle_dialog_secondary(&mut self) {
         if let PendingDialogAction::LaunchWithConflicts { mode, .. } = &self.pending_dialog_action {
-            self.ui
-                .set_status_text(format!("已取消 {} 启动", mode.display_name()).into());
+            self.ui.set_status_text(
+                format!(
+                    "{} {}",
+                    self.tr("已取消", "Cancelled", "キャンセル済み"),
+                    mode.display_name()
+                )
+                .into(),
+            );
         }
         self.hide_app_dialog();
     }
@@ -102,8 +112,16 @@ impl AppController {
     pub(super) fn confirm_manual_path_from_dialog(&mut self) {
         let raw = self.ui.get_app_dialog_input_text().to_string();
         if raw.trim().is_empty() {
-            self.ui.set_app_dialog_title("路径无效".into());
-            self.ui.set_app_dialog_text("游戏根目录不能为空。".into());
+            self.ui
+                .set_app_dialog_title(self.tr("路径无效", "Invalid Path", "無効なパス").into());
+            self.ui.set_app_dialog_text(
+                self.tr(
+                    "游戏根目录不能为空。",
+                    "Game root cannot be empty.",
+                    "ゲームルートは空にできません。",
+                )
+                .into(),
+            );
             self.ui.set_app_dialog_error(true);
             self.pending_dialog_action = PendingDialogAction::ManualPathInput;
             return;
@@ -115,8 +133,15 @@ impl AppController {
                 self.mode = PathMode::Manual;
                 self.ui.set_auto_mode(false);
                 self.ui.set_manual_path(path.display().to_string().into());
-                self.ui.set_detected_text("已手动设置游戏根目录".into());
-                self.set_current_target(Some(path.clone()), "已就绪");
+                self.ui.set_detected_text(
+                    self.tr(
+                        "已手动设置游戏根目录",
+                        "Game root set manually",
+                        "ゲームルートを手動で設定しました",
+                    )
+                    .into(),
+                );
+                self.set_current_target(Some(path.clone()), self.tr("已就绪", "Ready", "準備完了"));
                 self.append_log(&format!(
                     "[{}] 手动路径已设置：{}",
                     core::now_text(),
@@ -124,7 +149,8 @@ impl AppController {
                 ));
             }
             Err(error) => {
-                self.ui.set_app_dialog_title("路径无效".into());
+                self.ui
+                    .set_app_dialog_title(self.tr("路径无效", "Invalid Path", "無効なパス").into());
                 self.ui.set_app_dialog_text(error.to_string().into());
                 self.ui.set_app_dialog_error(true);
                 self.pending_dialog_action = PendingDialogAction::ManualPathInput;
