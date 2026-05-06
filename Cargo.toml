@@ -1,7 +1,7 @@
 [package]
 # 这是 Boundary 社区服工具箱的原生 Slint/Rust 重写版。
 name = "boundary_toolbox"
-version = "19.19.82-beta"
+version = "19.19.83-beta"
 edition = "2024"
 build = "build.rs"
 

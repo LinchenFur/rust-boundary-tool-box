@@ -9,7 +9,8 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
+use image::codecs::ico::{IcoEncoder, IcoFrame};
 use walkdir::WalkDir;
 use zip::CompressionMethod;
 use zip::ZipWriter;
@@ -193,18 +194,44 @@ fn build_icon(manifest_dir: &Path, project_root: &Path, out_dir: &Path) -> Resul
         square
             .save(&icon_png)
             .with_context(|| format!("write {}", icon_png.display()))?;
-        square
-            .save(&icon_ico)
-            .with_context(|| format!("write {}", icon_ico.display()))?;
+        write_multi_size_ico(&square, &icon_ico)?;
     } else {
         // 公开仓库不包含私有美术资源，因此生成中性图标，避免构建依赖二进制素材。
-        let icon = image::RgbaImage::from_pixel(256, 256, image::Rgba([11, 14, 19, 255]));
+        let icon = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            256,
+            256,
+            image::Rgba([11, 14, 19, 255]),
+        ));
         icon.save(&icon_png)
             .with_context(|| format!("write {}", icon_png.display()))?;
-        icon.save(&icon_ico)
-            .with_context(|| format!("write {}", icon_ico.display()))?;
+        write_multi_size_ico(&icon, &icon_ico)?;
     }
     Ok(())
+}
+
+/// 写入多尺寸 ICO，避免 Windows 资源管理器在小图标视图下显示异常。
+fn write_multi_size_ico(image: &image::DynamicImage, icon_ico: &Path) -> Result<()> {
+    let mut frames = Vec::new();
+    for size in [16, 24, 32, 48, 64, 128, 256] {
+        let resized = image
+            .resize_exact(size, size, image::imageops::FilterType::Lanczos3)
+            .to_rgba8();
+        frames.push(
+            IcoFrame::as_png(
+                resized.as_raw(),
+                size,
+                size,
+                image::ExtendedColorType::Rgba8,
+            )
+            .with_context(|| format!("encode {size}x{size} icon frame"))?,
+        );
+    }
+
+    let output =
+        File::create(icon_ico).with_context(|| format!("create {}", icon_ico.display()))?;
+    IcoEncoder::new(output)
+        .encode_images(&frames)
+        .with_context(|| format!("write {}", icon_ico.display()))
 }
 
 /// 按优先级返回可用图标素材路径。
@@ -227,11 +254,12 @@ fn icon_asset_candidates(manifest_dir: &Path, project_root: &Path) -> Vec<PathBu
 
 /// 将生成的 ICO 嵌入为 Windows 可执行文件图标。
 fn embed_windows_icon(out_dir: &Path) -> Result<()> {
-    let icon_ico = out_dir.join("app_icon.ico");
     let rc_path = out_dir.join("app_icon.rc");
     let mut rc_file =
         File::create(&rc_path).with_context(|| format!("create {}", rc_path.display()))?;
-    writeln!(rc_file, "1 ICON \"{}\"", icon_ico.display())?;
-    let _ = embed_resource::compile(rc_path, embed_resource::NONE);
+    writeln!(rc_file, "1 ICON \"app_icon.ico\"")?;
+    embed_resource::compile(&rc_path, embed_resource::NONE)
+        .manifest_required()
+        .map_err(|error| anyhow!("{error}"))?;
     Ok(())
 }
