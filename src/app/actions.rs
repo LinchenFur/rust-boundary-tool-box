@@ -423,18 +423,15 @@ impl AppController {
                     })
                     .ok_or_else(|| {
                         anyhow::anyhow!(
-                            "{}",
-                            format!(
-                                "{}/{} PID {} {}",
-                                protocol,
-                                port,
-                                pid,
-                                i18n::tr(
-                                    language,
-                                    "的端口占用已经不存在，请等待列表刷新。",
-                                    "is no longer using this port. Wait for the list to refresh.",
-                                    "のポート使用は既に存在しません。リストの更新をお待ちください。"
-                                )
+                            "{}/{} PID {} {}",
+                            protocol,
+                            port,
+                            pid,
+                            i18n::tr(
+                                language,
+                                "的端口占用已经不存在，请等待列表刷新。",
+                                "is no longer using this port. Wait for the list to refresh.",
+                                "のポート使用は既に存在しません。リストの更新をお待ちください。"
                             )
                         )
                     })?;

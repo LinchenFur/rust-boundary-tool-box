@@ -453,10 +453,10 @@ fn download_bytes_with_progress(
         }
     }
     check_download_cancel(cancel)?;
-    if let Some(progress) = progress {
-        if downloaded != last_reported {
-            progress(downloaded, total);
-        }
+    if let Some(progress) = progress
+        && downloaded != last_reported
+    {
+        progress(downloaded, total);
     }
     Ok(bytes)
 }

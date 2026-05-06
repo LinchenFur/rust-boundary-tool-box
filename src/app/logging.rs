@@ -5,7 +5,7 @@ use log::{LevelFilter, Log, Metadata, Record};
 static LOGGER: AppLogFilter = AppLogFilter;
 
 pub(super) fn install_log_filter() {
-    if log::set_logger(&LOGGER).is_ok() {}
+    let _ = log::set_logger(&LOGGER);
     log::set_max_level(LevelFilter::Error);
 }
 

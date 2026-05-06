@@ -166,7 +166,7 @@ fn ping_github_proxy_options(urls: Vec<String>) -> Vec<GithubProxyOption> {
         urls.into_iter().enumerate().collect::<VecDeque<_>>(),
     ));
     let results = Arc::new(Mutex::new(vec![None; task_count]));
-    let worker_count = task_count.min(PROXY_PING_WORKERS).max(1);
+    let worker_count = task_count.clamp(1, PROXY_PING_WORKERS);
     let mut handles = Vec::with_capacity(worker_count);
 
     for _ in 0..worker_count {

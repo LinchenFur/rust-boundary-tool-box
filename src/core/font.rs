@@ -269,7 +269,7 @@ fn register_user_font(path: &Path) -> Result<()> {
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .context("字体文件缺少文件名")?;
-    key.set_value(&font_registry_name(&file_name), &path.display().to_string())
+    key.set_value(font_registry_name(&file_name), &path.display().to_string())
         .context("写入当前用户字体注册表失败")
 }
 
