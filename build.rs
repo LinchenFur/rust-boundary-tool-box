@@ -209,16 +209,20 @@ fn build_icon(manifest_dir: &Path, project_root: &Path, out_dir: &Path) -> Resul
 
 /// 按优先级返回可用图标素材路径。
 fn icon_asset_candidates(manifest_dir: &Path, project_root: &Path) -> Vec<PathBuf> {
-    ["library_600x900_schinese.jpg", "Boundary.jpg"]
-        .into_iter()
-        .flat_map(|name| {
-            [
-                manifest_dir.join(name),
-                manifest_dir.join("assets").join(name),
-                project_root.join(name),
-            ]
-        })
-        .collect()
+    [
+        "T_Mainmenu_Logo.png",
+        "library_600x900_schinese.jpg",
+        "Boundary.jpg",
+    ]
+    .into_iter()
+    .flat_map(|name| {
+        [
+            manifest_dir.join(name),
+            manifest_dir.join("assets").join(name),
+            project_root.join(name),
+        ]
+    })
+    .collect()
 }
 
 /// 将生成的 ICO 嵌入为 Windows 可执行文件图标。
