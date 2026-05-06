@@ -1,8 +1,11 @@
 //! InstallerCore 安装、更新和卸载流程。
 
 use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::path::Path;
 use std::process::Stdio;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use chrono::Local;
@@ -53,14 +56,20 @@ impl InstallerCore {
         &self,
         target_win64: &Path,
         progress: ProgressReporter,
+        cancel: InstallCancelToken,
     ) -> Result<String> {
+        check_install_cancel(&cancel)?;
         report_install_progress(&progress, 0.01, "准备安装", "验证内嵌载荷和目标目录。");
         self.validate_payload()?;
+        check_install_cancel(&cancel)?;
         report_install_progress(&progress, 0.04, "准备安装", "检查游戏 Win64 目录。");
         validate_win64_path(target_win64)?;
+        check_install_cancel(&cancel)?;
+        let project_rebound_url = self.proxied_github_url(PROJECT_REBOUND_RELEASE_URL);
+        let boundary_meta_server_url = self.proxied_github_url(BOUNDARY_META_SERVER_ARCHIVE_URL);
         self.log(format!(
             "下载 ProjectRebound 在线版本：{}",
-            PROJECT_REBOUND_RELEASE_URL
+            project_rebound_url
         ));
         let project_download_progress = |downloaded, total| {
             report_download_progress(
@@ -73,18 +82,24 @@ impl InstallerCore {
                 total,
             );
         };
-        let project_rebound_release =
-            download_project_rebound_release(Some(&project_download_progress))?;
+        let project_rebound_release = download_project_rebound_release(
+            &project_rebound_url,
+            Some(&project_download_progress),
+            Some(&cancel),
+        )?;
+        check_install_cancel(&cancel)?;
         report_install_progress(
             &progress,
             0.32,
             "校验 ProjectRebound",
             "检查在线包内的 Payload.dll 和包装器。",
         );
-        let project_rebound_files = read_project_rebound_release_files(&project_rebound_release)?;
+        let project_rebound_files =
+            read_project_rebound_release_files(&project_rebound_url, &project_rebound_release)?;
+        check_install_cancel(&cancel)?;
         self.log(format!(
             "下载 BoundaryMetaServer 在线版本：{}",
-            BOUNDARY_META_SERVER_ARCHIVE_URL
+            boundary_meta_server_url
         ));
         report_install_progress(
             &progress,
@@ -105,8 +120,11 @@ impl InstallerCore {
         };
         let boundary_meta_server = download_boundary_meta_server(
             &self.installer_home.join("downloads"),
+            &boundary_meta_server_url,
             Some(&meta_server_download_progress),
+            Some(&cancel),
         )?;
+        check_install_cancel(&cancel)?;
         let meta_server_detail = if boundary_meta_server.cache_hit {
             format!("使用缓存：{}", boundary_meta_server.zip_name)
         } else {
@@ -129,7 +147,9 @@ impl InstallerCore {
         let node_runtime = download_node_runtime(
             &self.installer_home.join("downloads"),
             Some(&node_download_progress),
+            Some(&cancel),
         )?;
+        check_install_cancel(&cancel)?;
         let node_detail = if node_runtime.cache_hit {
             format!("使用缓存：{}", node_runtime.zip_name)
         } else {
@@ -139,6 +159,7 @@ impl InstallerCore {
 
         let existing_state = self.load_state(target_win64)?.unwrap_or_default();
         let existing_markers = self.load_markers(target_win64)?.unwrap_or_default();
+        check_install_cancel(&cancel)?;
 
         // 运行时文件会被游戏/服务加载，因此备份或原子替换前先停止相关进程。
         report_install_progress(
@@ -148,8 +169,10 @@ impl InstallerCore {
             "关闭相关运行进程并清理旧配置。",
         );
         self.stop_runtime_processes_before_install(target_win64)?;
+        check_install_cancel(&cancel)?;
         let legacy_removed = clean_legacy_range_mod(target_win64, self.logger.clone())?;
         let cleaned = clean_engine_ini(self.logger.clone())?;
+        check_install_cancel(&cancel)?;
         let install_id = format!(
             "{}_{}",
             Local::now().format("%Y%m%d_%H%M%S"),
@@ -172,6 +195,7 @@ impl InstallerCore {
         let mut managed_records = Vec::new();
         let item_count = MANAGED_ITEMS.len().max(1) as f32;
         for (index, item) in MANAGED_ITEMS.iter().enumerate() {
+            check_install_cancel(&cancel)?;
             let item_value = 0.76 + 0.16 * (index as f32 / item_count);
             report_install_progress(
                 &progress,
@@ -199,16 +223,19 @@ impl InstallerCore {
                     target_path.display()
                 ));
                 extract_boundary_meta_server(&boundary_meta_server, &target_path)?;
+                check_install_cancel(&cancel)?;
                 report_install_progress(
                     &progress,
                     (item_value + 0.02).min(0.92),
                     "安装登录服务器依赖",
-                    "执行 npm ci --omit=dev，首次安装需要联网下载 npm 包。",
+                    "执行 npm ci --omit=dev，使用国内 npm 源下载依赖。",
                 );
                 self.install_boundary_meta_server_dependencies(
                     &target_path,
                     &target_win64.join(NODEJS_DIR_NAME).join("node.exe"),
+                    &cancel,
                 )?;
+                check_install_cancel(&cancel)?;
                 boundary_meta_server.source_url.clone()
             } else if is_project_rebound_online_file(item.name) {
                 self.log(format!(
@@ -221,7 +248,7 @@ impl InstallerCore {
                     item.name,
                     &target_path,
                 )?;
-                format!("{}#{}", PROJECT_REBOUND_RELEASE_URL, item.name)
+                format!("{}#{}", project_rebound_url, item.name)
             } else if is_nodejs_online_item(item.name) {
                 self.log(format!(
                     "安装在线 Node.js 运行时：{} -> {}",
@@ -246,6 +273,7 @@ impl InstallerCore {
             };
 
             // 写入完成后再采集状态，确保 size/hash 对应实际安装内容。
+            check_install_cancel(&cancel)?;
             let stats = collect_stats(&target_path)?;
             managed_records.push(ManagedRecord {
                 name: item.name.to_string(),
@@ -272,15 +300,14 @@ impl InstallerCore {
             "写入安装记录",
             "生成 state.json 和安装标记。",
         );
+        check_install_cancel(&cancel)?;
         let state = InstallState {
             version: APP_VERSION.to_string(),
             app_id: APP_ID.to_string(),
             install_id: install_id.clone(),
             source_root: format!(
                 "embedded://payload.zip + {} + {} + {}",
-                PROJECT_REBOUND_RELEASE_URL,
-                boundary_meta_server.source_url,
-                node_runtime.source_url
+                project_rebound_url, boundary_meta_server.source_url, node_runtime.source_url
             ),
             target_dir: target_win64.display().to_string(),
             installed_at: if existing_state.installed_at.is_empty() {
@@ -405,7 +432,9 @@ impl InstallerCore {
         &self,
         server_dir: &Path,
         node_exe: &Path,
+        cancel: &InstallCancelToken,
     ) -> Result<()> {
+        check_install_cancel(cancel)?;
         let node_dir = node_exe.parent().context("Node.js 运行时路径缺少父目录")?;
         let npm_cli = node_dir
             .join("node_modules")
@@ -425,10 +454,11 @@ impl InstallerCore {
         let npm_cache = self.installer_home.join("npm-cache");
         ensure_dir(&npm_cache)?;
         self.log(format!(
-            "安装 BoundaryMetaServer npm 依赖：{}",
-            server_dir.display()
+            "安装 BoundaryMetaServer npm 依赖：{}，registry={}",
+            server_dir.display(),
+            NPM_REGISTRY_URL
         ));
-        let output = hidden_command(node_exe)
+        let mut child = hidden_command(node_exe)
             .current_dir(server_dir)
             .arg(&npm_cli)
             .arg("ci")
@@ -436,17 +466,40 @@ impl InstallerCore {
             .arg("--no-audit")
             .arg("--no-fund")
             .arg("--loglevel=error")
+            .arg(format!("--registry={NPM_REGISTRY_URL}"))
+            .arg("--replace-registry-host=always")
             .env("NO_UPDATE_NOTIFIER", "1")
             .env("npm_config_update_notifier", "false")
             .env("npm_config_cache", &npm_cache)
+            .env("npm_config_registry", NPM_REGISTRY_URL)
+            .env("npm_config_replace_registry_host", "always")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output()
+            .spawn()
             .context("执行 npm ci 安装登录服务器依赖失败")?;
-        if !output.status.success() {
+        let status = loop {
+            if cancel.is_cancelled() {
+                let _ = child.kill();
+                let _ = child.wait();
+                bail!("安装已取消");
+            }
+            if let Some(status) = child.try_wait().context("检查 npm ci 进程状态失败")? {
+                break status;
+            }
+            thread::sleep(Duration::from_millis(200));
+        };
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        if let Some(mut pipe) = child.stdout.take() {
+            let _ = pipe.read_to_end(&mut stdout);
+        }
+        if let Some(mut pipe) = child.stderr.take() {
+            let _ = pipe.read_to_end(&mut stderr);
+        }
+        if !status.success() {
             bail!(
                 "安装登录服务器依赖失败：{}",
-                command_output_text(&output.stdout, &output.stderr, output.status.code())
+                command_output_text(&stdout, &stderr, status.code())
             );
         }
         for dependency in ["body-parser", "express", "protobufjs"] {
@@ -454,12 +507,19 @@ impl InstallerCore {
                 bail!("安装登录服务器依赖失败：缺少 node_modules\\{dependency}");
             }
         }
-        let output_text = command_output_text(&output.stdout, &output.stderr, output.status.code());
+        let output_text = command_output_text(&stdout, &stderr, status.code());
         if !output_text.is_empty() {
             self.log(format!("BoundaryMetaServer npm 输出：{output_text}"));
         }
         Ok(())
     }
+}
+
+fn check_install_cancel(cancel: &InstallCancelToken) -> Result<()> {
+    if cancel.is_cancelled() {
+        bail!("安装已取消");
+    }
+    Ok(())
 }
 
 fn report_install_progress(

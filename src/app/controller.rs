@@ -49,6 +49,13 @@ impl AppController {
             core::now_text(),
             session_log_path.display()
         )?;
+        let is_admin = core::is_running_as_administrator();
+        writeln!(
+            session_log_file,
+            "[{}] 管理员模式：{}",
+            core::now_text(),
+            if is_admin { "是" } else { "否" }
+        )?;
         let mut app_prefs = match AppPrefs::load(&core.installer_home) {
             Ok(prefs) => prefs,
             Err(error) => {
@@ -68,7 +75,11 @@ impl AppController {
             }
         };
         app_prefs.language = i18n::normalize_language(app_prefs.language);
+        app_prefs.github_proxy_prefix =
+            core::normalize_github_proxy_prefix(&app_prefs.github_proxy_prefix);
+        core.set_github_proxy_prefix(&app_prefs.github_proxy_prefix);
         let language = app_prefs.language;
+        let github_proxy_prefix = app_prefs.github_proxy_prefix.clone();
         let vnt_prefs = app_prefs.vnt.clone();
         ui.set_language(language);
 
@@ -108,6 +119,10 @@ impl AppController {
             ),
             language,
         )]));
+        let github_proxy_model = Rc::new(VecModel::from(initial_github_proxy_rows(
+            &github_proxy_prefix,
+            language,
+        )));
         let vnt_server_option_model = Rc::new(VecModel::from(
             vnt_prefs
                 .server_options
@@ -120,6 +135,7 @@ impl AppController {
         ui.set_port_rows(ModelRc::from(port_model.clone()));
         ui.set_drive_rows(ModelRc::from(drive_model.clone()));
         ui.set_server_rows(ModelRc::from(server_model.clone()));
+        ui.set_github_proxy_rows(ModelRc::from(github_proxy_model.clone()));
         ui.set_vnt_server_options(ModelRc::from(vnt_server_option_model.clone()));
         ui.set_vnt_server_rows(ModelRc::from(vnt_server_model.clone()));
         ui.set_vnt_peer_rows(ModelRc::from(vnt_peer_model.clone()));
@@ -144,7 +160,7 @@ impl AppController {
         );
         ui.set_status_text(
             format!(
-                "{} / v{}",
+                "{} / {}",
                 i18n::tr(language, "准备就绪", "Ready", "準備完了"),
                 APP_VERSION
             )
@@ -161,12 +177,15 @@ impl AppController {
         );
         ui.set_show_logs(false);
         ui.set_busy(false);
+        ui.set_is_admin(is_admin);
         ui.set_pulse(false);
         ui.set_install_progress_visible(false);
         ui.set_install_progress_value(0.0);
         ui.set_install_progress_percent("0%".into());
         ui.set_install_progress_title("".into());
         ui.set_install_progress_detail("".into());
+        ui.set_install_progress_detail_lines(1);
+        ui.set_show_github_proxy_dialog(false);
         ui.set_auto_mode(true);
         ui.set_has_target(false);
         ui.set_servers_loading(false);
@@ -189,11 +208,23 @@ impl AppController {
             )
             .into(),
         );
+        ui.set_github_proxy_text(github_proxy_prefix.into());
+        ui.set_github_proxy_loading(false);
+        ui.set_github_proxy_status_text(
+            i18n::tr(
+                language,
+                "代理列表：未刷新",
+                "Proxy list: not refreshed",
+                "プロキシ一覧: 未更新",
+            )
+            .into(),
+        );
         ui.set_show_drive_dialog(false);
         ui.set_show_app_dialog(false);
         ui.set_app_dialog_confirm(false);
         ui.set_app_dialog_input(false);
         ui.set_app_dialog_error(false);
+        ui.set_app_dialog_text_lines(1);
         ui.set_app_dialog_title("".into());
         ui.set_app_dialog_text("".into());
         ui.set_app_dialog_input_text("".into());
@@ -224,11 +255,14 @@ impl AppController {
             drive_model,
             port_model,
             server_model,
+            github_proxy_model,
             vnt_server_option_model,
             vnt_server_model,
             vnt_peer_model,
             vnt_session: None,
             app_prefs,
+            is_admin,
+            install_cancel: None,
             pending_dialog_action: PendingDialogAction::None,
         }));
 
@@ -257,6 +291,40 @@ impl AppController {
             let controller = Rc::clone(controller);
             ui.unwrap().on_language_changed(move |language| {
                 controller.borrow_mut().set_language(language);
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_github_proxy_changed(move |proxy| {
+                controller
+                    .borrow_mut()
+                    .set_github_proxy_prefix(proxy.to_string());
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_open_github_proxy_dialog_clicked(move || {
+                controller.borrow().ui.set_show_github_proxy_dialog(true);
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_github_proxy_selected(move |proxy| {
+                controller
+                    .borrow_mut()
+                    .select_github_proxy_from_dialog(proxy.to_string());
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_github_proxy_dialog_cancelled(move || {
+                controller.borrow().ui.set_show_github_proxy_dialog(false);
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_refresh_github_proxies_clicked(move || {
+                controller.borrow_mut().start_refresh_github_proxy_list();
             });
         }
         {
@@ -310,6 +378,12 @@ impl AppController {
                 if !controller.ui.get_busy() {
                     controller.ui.set_install_progress_visible(false);
                 }
+            });
+        }
+        {
+            let controller = Rc::clone(controller);
+            ui.unwrap().on_install_progress_cancelled(move || {
+                controller.borrow_mut().cancel_install();
             });
         }
         {
@@ -497,6 +571,7 @@ impl AppController {
     pub(super) fn initialize(&mut self) {
         let installing_font = self.start_ui_font_check();
         self.refresh_target_from_mode(true);
+        self.start_refresh_github_proxy_list();
         self.start_refresh_servers();
         if !installing_font {
             self.start_update_check(true);
@@ -504,6 +579,14 @@ impl AppController {
     }
 
     pub(super) fn on_page_changed(&mut self, page: i32) {
+        if self.ui.get_busy() {
+            let locked_page = self.active_page.load(Ordering::Relaxed);
+            if page != locked_page {
+                self.ui.set_page(locked_page);
+            }
+            return;
+        }
+
         self.active_page.store(page, Ordering::Relaxed);
         if page == 2 {
             self.refresh_port_rows_once();

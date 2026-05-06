@@ -77,6 +77,7 @@ impl AppController {
     pub(super) fn localize_action_status(&self, status: &str) -> String {
         match status {
             "完成" => self.tr("完成", "Done", "完了").to_string(),
+            "已取消" => self.tr("已取消", "Cancelled", "キャンセル済み").to_string(),
             "执行失败" => self.tr("执行失败", "Failed", "失敗").to_string(),
             "字体安装完成" => self
                 .tr(
@@ -131,5 +132,7 @@ impl AppController {
             self.set_vnt_server_rows(vnt_server_placeholder_rows(language));
             self.set_vnt_peer_rows(vnt_placeholder_rows(language));
         }
+
+        self.sync_github_proxy_current_selection();
     }
 }

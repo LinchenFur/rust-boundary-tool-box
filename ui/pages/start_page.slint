@@ -7,6 +7,7 @@ import { I18n } from "../i18n.slint";
 export component StartPage inherits Rectangle {
     in property <bool> has_target;
     in property <bool> busy;
+    in property <bool> is_admin: true;
     in property <bool> auto_mode;
     in property <string> status_text;
     in property <string> target_text;
@@ -65,7 +66,7 @@ export component StartPage inherits Rectangle {
                             horizontal-stretch: 1;
                             label: I18n.tr("安装", "Install", "インストール");
                             sub: I18n.tr("写入社区服文件", "Write community server files", "コミュニティサーバーファイルを書き込み");
-                            enabled: has_target && !busy;
+                            enabled: has_target && !busy && is_admin;
                             accent: #9ef0b5;
                             clicked => { root.install_clicked(); }
                         }
@@ -74,7 +75,7 @@ export component StartPage inherits Rectangle {
                             horizontal-stretch: 1;
                             label: I18n.tr("卸载", "Uninstall", "アンインストール");
                             sub: I18n.tr("移除已安装文件", "Remove installed files", "インストール済みファイルを削除");
-                            enabled: has_target && !busy;
+                            enabled: has_target && !busy && is_admin;
                             accent: #ffb4ab;
                             clicked => { root.uninstall_clicked(); }
                         }

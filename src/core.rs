@@ -5,7 +5,10 @@
 //! 都收敛在这里处理。
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{
+    Arc, RwLock,
+    atomic::{AtomicBool, Ordering},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -23,19 +26,25 @@ pub const STATE_FILE_NAME: &str = "state.json";
 pub const MARKERS_FILE_NAME: &str = "markers.json";
 /// 在 Windows 上隐藏辅助进程窗口所用的 CREATE_NO_WINDOW 标志。
 pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-/// 用于两个 ProjectRebound 运行时二进制的 Nightly 包地址。
-pub const PROJECT_REBOUND_RELEASE_URL: &str = "https://git-proxy.cubland.icu/https://github.com/STanJK/ProjectRebound/releases/download/Nightly/Release.zip";
+/// 默认 GitHub 代理前缀；留空则直接访问 GitHub。
+pub const DEFAULT_GITHUB_PROXY_PREFIX: &str = "https://git-proxy.cubland.icu/";
+/// 用于两个 ProjectRebound 运行时二进制的 Nightly 包原始地址。
+pub const PROJECT_REBOUND_RELEASE_URL: &str =
+    "https://github.com/STanJK/ProjectRebound/releases/download/Nightly/Release.zip";
 /// 这些文件刻意从线上获取，而不是放进 payload.zip。
 pub const PROJECT_REBOUND_ONLINE_FILES: &[&str] =
     &["Payload.dll", "ProjectReboundServerWrapper.exe"];
-/// 登录服务器源码包。GitHub 下载统一走 git-proxy 加速。
-pub const BOUNDARY_META_SERVER_ARCHIVE_URL: &str = "https://git-proxy.cubland.icu/https://github.com/STanJK/BoundaryMetaServer/archive/refs/heads/main.zip";
+/// 登录服务器源码包原始地址。
+pub const BOUNDARY_META_SERVER_ARCHIVE_URL: &str =
+    "https://github.com/STanJK/BoundaryMetaServer/archive/refs/heads/main.zip";
 /// 安装到目标 Win64 目录内的登录服务器目录名。
 pub const BOUNDARY_META_SERVER_DIR_NAME: &str = "BoundaryMetaServer-main";
 /// Node.js 官方版本索引，用于安装本地登录服务器运行时。
 pub const NODEJS_DIST_INDEX_URL: &str = "https://nodejs.org/dist/index.json";
 /// 安装到目标 Win64 目录内的 Node.js 运行时目录名。
 pub const NODEJS_DIR_NAME: &str = "nodejs";
+/// 安装 BoundaryMetaServer 依赖时使用的国内 npm 镜像源。
+pub const NPM_REGISTRY_URL: &str = "https://registry.npmmirror.com";
 /// Wintun 官方下载包。该源不在 GitHub，不需要 git-proxy。
 pub const WINTUN_RELEASE_URL: &str = "https://www.wintun.net/builds/wintun-0.14.1.zip";
 pub const WINTUN_RELEASE_NAME: &str = "wintun-0.14.1.zip";
@@ -139,6 +148,25 @@ const OLD_MOD_UE4SS_LOADER_FILES: &[&str] = &["xinput1_3.dll"];
 
 pub type Logger = Arc<dyn Fn(String) + Send + Sync + 'static>;
 pub type ProgressReporter = Arc<dyn Fn(InstallProgress) + Send + Sync + 'static>;
+
+#[derive(Debug, Clone, Default)]
+pub struct InstallCancelToken {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl InstallCancelToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
+}
 
 /// 安装过程的可见进度。value 使用 0.0..=1.0，detail 放当前下载/解压细节。
 #[derive(Debug, Clone)]
@@ -279,6 +307,7 @@ pub struct InstallerCore {
     pub runtime_dir: PathBuf,
     pub installer_home: PathBuf,
     logger: Logger,
+    github_proxy_prefix: Arc<RwLock<String>>,
 }
 
 pub(crate) mod cleanup;
@@ -294,5 +323,6 @@ pub(crate) mod process;
 pub(crate) mod runtime_ops;
 pub(crate) mod util;
 
+pub use installer::normalize_github_proxy_prefix;
 pub use process::format_port_conflicts;
-pub use util::now_text;
+pub use util::{is_running_as_administrator, now_text};

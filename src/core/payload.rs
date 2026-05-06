@@ -125,21 +125,22 @@ pub(crate) fn is_boundary_meta_server_online_item(name: &str) -> bool {
 
 /// 下载当前 ProjectRebound Nightly zip。
 pub(crate) fn download_project_rebound_release(
+    source_url: &str,
     progress: Option<DownloadProgress<'_>>,
+    cancel: Option<&InstallCancelToken>,
 ) -> Result<Vec<u8>> {
-    download_bytes_with_progress(
-        PROJECT_REBOUND_RELEASE_URL,
-        Duration::from_secs(90),
-        progress,
-    )
-    .context("下载 ProjectRebound Nightly Release 失败")
+    download_bytes_with_progress(source_url, Duration::from_secs(90), progress, cancel)
+        .context("下载 ProjectRebound Nightly Release 失败")
 }
 
 /// 下载 BoundaryMetaServer main 分支源码包。
 pub(crate) fn download_boundary_meta_server(
     cache_dir: &Path,
+    source_url: &str,
     progress: Option<DownloadProgress<'_>>,
+    cancel: Option<&InstallCancelToken>,
 ) -> Result<BoundaryMetaServerPackage> {
+    check_download_cancel(cancel)?;
     ensure_dir(cache_dir)?;
     let zip_name = "BoundaryMetaServer-main.zip".to_string();
     let zip_path = cache_dir.join(&zip_name);
@@ -151,7 +152,7 @@ pub(crate) fn download_boundary_meta_server(
                 progress(bytes.len() as u64, Some(bytes.len() as u64));
             }
             return Ok(BoundaryMetaServerPackage {
-                source_url: BOUNDARY_META_SERVER_ARCHIVE_URL.to_string(),
+                source_url: source_url.to_string(),
                 zip_name,
                 cache_hit: true,
                 bytes,
@@ -159,19 +160,17 @@ pub(crate) fn download_boundary_meta_server(
         }
     }
 
-    let bytes = download_bytes_with_progress(
-        BOUNDARY_META_SERVER_ARCHIVE_URL,
-        Duration::from_secs(180),
-        progress,
-    )
-    .context("下载 BoundaryMetaServer 失败")?;
+    let bytes =
+        download_bytes_with_progress(source_url, Duration::from_secs(180), progress, cancel)
+            .context("下载 BoundaryMetaServer 失败")?;
+    check_download_cancel(cancel)?;
     if !boundary_meta_server_archive_valid(&bytes) {
         bail!("BoundaryMetaServer 压缩包结构无效：缺少 index.js。");
     }
     fs::write(&zip_path, &bytes)
         .with_context(|| format!("写入 BoundaryMetaServer 缓存失败：{}", zip_path.display()))?;
     Ok(BoundaryMetaServerPackage {
-        source_url: BOUNDARY_META_SERVER_ARCHIVE_URL.to_string(),
+        source_url: source_url.to_string(),
         zip_name,
         cache_hit: false,
         bytes,
@@ -182,8 +181,11 @@ pub(crate) fn download_boundary_meta_server(
 pub(crate) fn download_node_runtime(
     cache_dir: &Path,
     progress: Option<DownloadProgress<'_>>,
+    cancel: Option<&InstallCancelToken>,
 ) -> Result<NodeRuntimePackage> {
+    check_download_cancel(cancel)?;
     let release = latest_node_lts_release()?;
+    check_download_cancel(cancel)?;
     let arch = node_windows_arch()?;
     let file_key = format!("win-{arch}-zip");
     if !release.files.iter().any(|file| file == &file_key) {
@@ -196,6 +198,7 @@ pub(crate) fn download_node_runtime(
     let expected_sha = download_text(&shasums_url)
         .ok()
         .and_then(|text| parse_shasum_for_file(&text, &zip_name));
+    check_download_cancel(cancel)?;
     ensure_dir(cache_dir)?;
     let zip_path = cache_dir.join(&zip_name);
 
@@ -219,8 +222,9 @@ pub(crate) fn download_node_runtime(
         }
     }
 
-    let bytes = download_bytes_with_progress(&zip_url, Duration::from_secs(240), progress)
+    let bytes = download_bytes_with_progress(&zip_url, Duration::from_secs(240), progress, cancel)
         .context("下载 Node.js 运行时失败")?;
+    check_download_cancel(cancel)?;
     if let Some(expected) = expected_sha {
         let actual = compute_sha256_bytes(&bytes);
         if !actual.eq_ignore_ascii_case(&expected) {
@@ -409,7 +413,9 @@ fn download_bytes_with_progress(
     url: &str,
     timeout: Duration,
     progress: Option<DownloadProgress<'_>>,
+    cancel: Option<&InstallCancelToken>,
 ) -> Result<Vec<u8>> {
+    check_download_cancel(cancel)?;
     let mut response = reqwest::blocking::Client::builder()
         .timeout(timeout)
         .user_agent(format!("boundary-toolbox/{}", APP_VERSION))
@@ -429,6 +435,7 @@ fn download_bytes_with_progress(
 
     let mut buffer = [0_u8; 128 * 1024];
     loop {
+        check_download_cancel(cancel)?;
         let read = response
             .read(&mut buffer)
             .with_context(|| format!("读取下载内容失败：{url}"))?;
@@ -445,6 +452,7 @@ fn download_bytes_with_progress(
             }
         }
     }
+    check_download_cancel(cancel)?;
     if let Some(progress) = progress {
         if downloaded != last_reported {
             progress(downloaded, total);
@@ -453,13 +461,27 @@ fn download_bytes_with_progress(
     Ok(bytes)
 }
 
+fn check_download_cancel(cancel: Option<&InstallCancelToken>) -> Result<()> {
+    if cancel.is_some_and(InstallCancelToken::is_cancelled) {
+        bail!("安装已取消");
+    }
+    Ok(())
+}
+
 /// 预检在线 zip，并把所有必需文件读入内存。
 ///
 /// 替换前先把字节保存在内存里，可以防止代理返回 HTML、损坏 zip、
 /// 或 release 缺少文件时留下半安装状态。
 pub(crate) fn read_project_rebound_release_files(
+    source_url: &str,
     release_zip: &[u8],
 ) -> Result<HashMap<String, Vec<u8>>> {
+    if !looks_like_zip(release_zip) {
+        bail!(
+            "ProjectRebound Nightly Release 下载结果不是 zip：{}。这通常是下载代理返回了网页或错误页，请在设置里换一个延迟可用的代理节点，或清空代理后直连。",
+            describe_download_payload(source_url, release_zip)
+        );
+    }
     let mut archive = ZipArchive::new(Cursor::new(release_zip))
         .context("无法读取 ProjectRebound Nightly Release 压缩包")?;
     let mut files = HashMap::new();
@@ -468,6 +490,25 @@ pub(crate) fn read_project_rebound_release_files(
         files.insert(item_name.to_string(), bytes);
     }
     Ok(files)
+}
+
+fn looks_like_zip(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[b'P', b'K', 0x03, 0x04])
+        || bytes.starts_with(&[b'P', b'K', 0x05, 0x06])
+        || bytes.starts_with(&[b'P', b'K', 0x07, 0x08])
+}
+
+fn describe_download_payload(source_url: &str, bytes: &[u8]) -> String {
+    let head = bytes
+        .iter()
+        .take(16)
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "url={source_url}, length={} bytes, head={head}",
+        bytes.len()
+    )
 }
 
 /// 在 ProjectRebound zip 内按文件名查找一个必需文件。

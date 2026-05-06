@@ -2,6 +2,18 @@
 
 use super::*;
 
+const DIALOG_TEXT_COLUMNS: usize = 60;
+
+pub(super) fn estimate_dialog_text_lines(text: &str, columns: usize) -> i32 {
+    let columns = columns.max(1);
+    let mut lines = 0usize;
+    for physical_line in text.split('\n') {
+        let chars = physical_line.chars().count().max(1);
+        lines += chars.div_ceil(columns);
+    }
+    i32::try_from(lines.clamp(1, 240)).unwrap_or(240)
+}
+
 impl AppController {
     /// 显示非错误应用内弹窗。
     pub(super) fn show_info_dialog(&mut self, title: &str, text: &str) {
@@ -59,6 +71,8 @@ impl AppController {
     ) {
         self.ui.set_app_dialog_title(title.into());
         self.ui.set_app_dialog_text(text.into());
+        self.ui
+            .set_app_dialog_text_lines(estimate_dialog_text_lines(text, DIALOG_TEXT_COLUMNS));
         self.ui.set_app_dialog_primary_text(primary.into());
         self.ui.set_app_dialog_secondary_text(secondary.into());
         self.ui.set_app_dialog_confirm(confirm);
@@ -73,6 +87,7 @@ impl AppController {
         self.ui.set_app_dialog_confirm(false);
         self.ui.set_app_dialog_input(false);
         self.ui.set_app_dialog_error(false);
+        self.ui.set_app_dialog_text_lines(1);
         self.pending_dialog_action = PendingDialogAction::None;
     }
 
@@ -122,6 +137,15 @@ impl AppController {
                 )
                 .into(),
             );
+            self.ui
+                .set_app_dialog_text_lines(estimate_dialog_text_lines(
+                    self.tr(
+                        "游戏根目录不能为空。",
+                        "Game root cannot be empty.",
+                        "ゲームルートは空にできません。",
+                    ),
+                    DIALOG_TEXT_COLUMNS,
+                ));
             self.ui.set_app_dialog_error(true);
             self.pending_dialog_action = PendingDialogAction::ManualPathInput;
             return;
@@ -151,7 +175,13 @@ impl AppController {
             Err(error) => {
                 self.ui
                     .set_app_dialog_title(self.tr("路径无效", "Invalid Path", "無効なパス").into());
-                self.ui.set_app_dialog_text(error.to_string().into());
+                let error = error.to_string();
+                self.ui.set_app_dialog_text(error.clone().into());
+                self.ui
+                    .set_app_dialog_text_lines(estimate_dialog_text_lines(
+                        &error,
+                        DIALOG_TEXT_COLUMNS,
+                    ));
                 self.ui.set_app_dialog_error(true);
                 self.pending_dialog_action = PendingDialogAction::ManualPathInput;
             }

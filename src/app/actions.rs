@@ -5,6 +5,18 @@ use super::*;
 impl AppController {
     /// 在工作线程中启动安装或更新。
     pub(super) fn start_install(&mut self) {
+        if !self.is_admin {
+            self.show_error_dialog(
+                self.tr("安装", "Install", "インストール"),
+                self.tr(
+                    "未使用管理员模式启动",
+                    "Not started as administrator",
+                    "管理者モードで起動していません",
+                ),
+            );
+            return;
+        }
+
         let target = match self.require_target() {
             Ok(target) => target,
             Err(error) => {
@@ -27,16 +39,17 @@ impl AppController {
             self.tr("准备安装", "Preparing install", "インストール準備中")
                 .into(),
         );
-        self.ui
-            .set_install_progress_detail(target.display().to_string().into());
+        self.set_install_progress_detail_text(&target.display().to_string());
+        let cancel_token = InstallCancelToken::new();
+        self.install_cancel = Some(cancel_token.clone());
         let core = self.core.clone();
         let tx = self.tx.clone();
         let progress_tx = tx.clone();
         let progress = Arc::new(move |progress: InstallProgress| {
             let _ = progress_tx.send(AppMessage::InstallProgress(progress));
         });
-        thread::spawn(
-            move || match core.install_with_progress(&target, progress) {
+        thread::spawn(move || {
+            match core.install_with_progress(&target, progress, cancel_token.clone()) {
                 Ok(dialog) => {
                     let _ = tx.send(AppMessage::ActionFinished {
                         title: "安装".to_string(),
@@ -47,18 +60,59 @@ impl AppController {
                     });
                 }
                 Err(error) => {
+                    let status = if cancel_token.is_cancelled() || error.to_string() == "安装已取消"
+                    {
+                        "已取消"
+                    } else {
+                        "执行失败"
+                    };
                     let _ = tx.send(AppMessage::ActionFailed {
                         title: "安装".to_string(),
-                        status: "执行失败".to_string(),
+                        status: status.to_string(),
                         error: error.to_string(),
                     });
                 }
-            },
+            }
+        });
+    }
+
+    pub(super) fn cancel_install(&mut self) {
+        let Some(cancel) = self.install_cancel.as_ref() else {
+            return;
+        };
+        cancel.cancel();
+        self.ui.set_status_text(
+            self.tr(
+                "正在取消安装...",
+                "Cancelling install...",
+                "インストールをキャンセル中...",
+            )
+            .into(),
         );
+        self.ui
+            .set_install_progress_title(self.tr("正在取消", "Cancelling", "キャンセル中").into());
+        self.set_install_progress_detail_text(self.tr(
+            "正在等待当前步骤停止。",
+            "Waiting for the current step to stop.",
+            "現在の処理が停止するのを待っています。",
+        ));
+        self.append_log(&format!("[{}] 用户请求取消安装。", core::now_text()));
     }
 
     /// 在工作线程中启动卸载。
     pub(super) fn start_uninstall(&mut self) {
+        if !self.is_admin {
+            self.show_error_dialog(
+                self.tr("卸载", "Uninstall", "アンインストール"),
+                self.tr(
+                    "未使用管理员模式启动",
+                    "Not started as administrator",
+                    "管理者モードで起動していません",
+                ),
+            );
+            return;
+        }
+
         let target = match self.require_target() {
             Ok(target) => target,
             Err(error) => {
@@ -258,9 +312,13 @@ impl AppController {
         let core = self.core.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let result = (|| -> Result<(String, String)> {
+            let result = (|| -> Result<(String, String, Vec<CorePortStatusRow>)> {
                 let snapshot = core.collect_runtime_processes(&target)?;
-                let conflicts = core.collect_port_conflicts()?;
+                let rows = core.port_status_rows_for_target(Some(&target))?;
+                let conflicts = rows
+                    .iter()
+                    .filter_map(|row| row.conflict.clone())
+                    .collect::<Vec<_>>();
                 let has_runtime = runtime_snapshot_has_any(&snapshot);
                 let has_conflicts = !conflicts.is_empty();
                 let message = format_process_detection_message(&snapshot, &conflicts, language);
@@ -297,11 +355,12 @@ impl AppController {
                     )
                     .to_string(),
                 };
-                Ok((message, status))
+                Ok((message, status, rows))
             })();
 
             match result {
-                Ok((message, process_status)) => {
+                Ok((message, process_status, rows)) => {
+                    let _ = tx.send(AppMessage::PortRows(rows));
                     let _ = tx.send(AppMessage::ActionFinished {
                         title: "进程检测".to_string(),
                         status: "完成".to_string(),

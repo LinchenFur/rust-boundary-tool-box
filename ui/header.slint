@@ -5,6 +5,7 @@ export component ShellHeader inherits Rectangle {
     in-out property <int> page;
     in property <bool> has_target;
     in property <bool> pulse;
+    in property <bool> busy: false;
         HorizontalLayout {
             height: 64px;
             spacing: 14px;
@@ -39,6 +40,7 @@ export component ShellHeader inherits Rectangle {
                 width: 112px;
                 label: I18n.tr("启动", "Launch", "起動");
                 selected: page == 0;
+                enabled: !busy;
                 clicked => { root.page = 0; }
             }
 
@@ -46,6 +48,7 @@ export component ShellHeader inherits Rectangle {
                 width: 112px;
                 label: I18n.tr("目录", "Path", "パス");
                 selected: page == 1;
+                enabled: !busy;
                 clicked => { root.page = 1; }
             }
 
@@ -53,6 +56,7 @@ export component ShellHeader inherits Rectangle {
                 width: 112px;
                 label: I18n.tr("诊断", "Diagnostics", "診断");
                 selected: page == 2;
+                enabled: !busy;
                 clicked => { root.page = 2; }
             }
 
@@ -60,6 +64,7 @@ export component ShellHeader inherits Rectangle {
                 width: 112px;
                 label: I18n.tr("联机", "Network", "ネットワーク");
                 selected: page == 5;
+                enabled: !busy;
                 clicked => { root.page = 5; }
             }
 
@@ -67,6 +72,7 @@ export component ShellHeader inherits Rectangle {
                 width: 112px;
                 label: I18n.tr("服务器", "Servers", "サーバー");
                 selected: page == 4;
+                enabled: !busy;
                 clicked => { root.page = 4; }
             }
 
@@ -74,6 +80,7 @@ export component ShellHeader inherits Rectangle {
                 width: 112px;
                 label: I18n.tr("设置", "Settings", "設定");
                 selected: page == 3;
+                enabled: !busy;
                 clicked => { root.page = 3; }
             }
 

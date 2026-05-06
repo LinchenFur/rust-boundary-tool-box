@@ -3,6 +3,7 @@
 use super::*;
 
 const MAX_VISIBLE_LOG_LINES: usize = 400;
+const INSTALL_DETAIL_COLUMNS: usize = 54;
 
 impl AppController {
     /// 同时向会话日志文件和可见日志面板追加一行。
@@ -15,6 +16,15 @@ impl AppController {
             format!("{current}\n{message}")
         };
         self.ui.set_log_text(trim_visible_log(&next).into());
+    }
+
+    pub(super) fn set_install_progress_detail_text(&self, detail: &str) {
+        self.ui.set_install_progress_detail(detail.into());
+        self.ui
+            .set_install_progress_detail_lines(estimate_dialog_text_lines(
+                detail,
+                INSTALL_DETAIL_COLUMNS,
+            ));
     }
 
     /// 将队列中的工作线程消息应用到 UI 状态。
@@ -30,7 +40,7 @@ impl AppController {
                     self.ui
                         .set_install_progress_percent(format!("{:.0}%", value * 100.0).into());
                     self.ui.set_install_progress_title(title.into());
-                    self.ui.set_install_progress_detail(detail.into());
+                    self.set_install_progress_detail_text(&detail);
                 }
                 AppMessage::PortRows(rows) => self.update_port_rows(rows),
                 AppMessage::ServerRows(rows) => {
@@ -86,7 +96,7 @@ impl AppController {
                         update_status_text(&result, self.language()).into(),
                     );
                     self.append_log(&format!(
-                        "[{}] 更新检查完成：当前 v{}，最新 {}",
+                        "[{}] 更新检查完成：当前 {}，最新 {}",
                         core::now_text(),
                         APP_VERSION,
                         result.latest_tag
@@ -119,6 +129,51 @@ impl AppController {
                     };
                     self.show_error_dialog(title, &error);
                 }
+                AppMessage::GithubProxyRows {
+                    rows,
+                    fetched_count,
+                    update_time,
+                } => {
+                    self.ui.set_github_proxy_loading(false);
+                    let rows = proxy_options_to_rows(
+                        &rows,
+                        &self.ui.get_github_proxy_text(),
+                        self.language(),
+                    );
+                    self.set_github_proxy_rows(rows);
+                    let update_time = update_time.unwrap_or_else(|| "-".to_string());
+                    self.ui.set_github_proxy_status_text(
+                        format!(
+                            "{}{fetched_count}{}{}",
+                            self.tr("代理列表：已加载 ", "Proxy list: loaded ", "プロキシ一覧: "),
+                            self.tr(" 个，更新时间：", " nodes, updated: ", " 件、更新時刻: "),
+                            update_time
+                        )
+                        .into(),
+                    );
+                    self.append_log(&format!(
+                        "[{}] 已刷新 GitHub 代理列表：{} 个，更新时间 {}",
+                        core::now_text(),
+                        fetched_count,
+                        update_time
+                    ));
+                }
+                AppMessage::GithubProxyRowsFailed(error) => {
+                    self.ui.set_github_proxy_loading(false);
+                    self.ui.set_github_proxy_status_text(
+                        self.tr(
+                            "代理列表：刷新失败",
+                            "Proxy list: refresh failed",
+                            "プロキシ一覧: 更新失敗",
+                        )
+                        .into(),
+                    );
+                    self.append_log(&format!(
+                        "[{}] GitHub 代理列表刷新失败：{}",
+                        core::now_text(),
+                        error
+                    ));
+                }
                 AppMessage::VntEvent(event) => self.apply_vnt_event(event),
                 AppMessage::ActionFinished {
                     title,
@@ -128,6 +183,9 @@ impl AppController {
                     target,
                 } => {
                     self.ui.set_busy(false);
+                    if title == "安装" {
+                        self.install_cancel = None;
+                    }
                     self.ui
                         .set_status_text(self.localize_action_status(&status).into());
                     if let Some(process_status) = process_status {
@@ -148,8 +206,8 @@ impl AppController {
                             self.tr("安装完成", "Install complete", "インストール完了")
                                 .into(),
                         );
-                        self.ui.set_install_progress_detail(
-                            localized_dialog.replace('\n', "；").into(),
+                        self.set_install_progress_detail_text(
+                            &localized_dialog.replace('\n', "；"),
                         );
                         // 安装成功后保留进度弹窗，由用户确认关闭。
                         self.append_log(&format!(
@@ -168,19 +226,43 @@ impl AppController {
                     error,
                 } => {
                     self.ui.set_busy(false);
+                    if title == "安装" {
+                        self.install_cancel = None;
+                    }
                     self.ui
                         .set_status_text(self.localize_action_status(&status).into());
+                    let cancelled = status == "已取消";
                     if title == "安装" {
                         self.ui.set_install_progress_visible(true);
                         self.ui.set_install_progress_title(
-                            self.tr("安装失败", "Install failed", "インストール失敗")
-                                .into(),
+                            if cancelled {
+                                self.tr(
+                                    "安装已取消",
+                                    "Install cancelled",
+                                    "インストールはキャンセルされました",
+                                )
+                            } else {
+                                self.tr("安装失败", "Install failed", "インストール失敗")
+                            }
+                            .into(),
                         );
-                        self.ui.set_install_progress_detail(error.clone().into());
+                        if cancelled {
+                            self.set_install_progress_detail_text(self.tr(
+                                "安装已取消",
+                                "Install cancelled",
+                                "インストールはキャンセルされました",
+                            ));
+                        } else {
+                            self.set_install_progress_detail_text(&error);
+                        }
                     }
                     self.sync_has_target();
                     let display_title = self.localize_action_title(&title);
-                    self.show_error_dialog(&display_title, &error);
+                    if cancelled {
+                        self.append_log(&format!("[{}] 安装已取消。", core::now_text()));
+                    } else {
+                        self.show_error_dialog(&display_title, &error);
+                    }
                 }
                 AppMessage::ScanFinished { result, dialog } => {
                     self.ui.set_busy(false);
@@ -338,7 +420,13 @@ fn localize_install_progress(progress: &InstallProgress, language: i32) -> (Stri
 
 fn localize_install_text(text: &str, language: i32) -> String {
     match text {
-        "准备安装" => i18n::tr(language, "准备安装", "Preparing install", "インストール準備中").to_string(),
+        "准备安装" => i18n::tr(
+            language,
+            "准备安装",
+            "Preparing install",
+            "インストール準備中",
+        )
+        .to_string(),
         "验证内嵌载荷和目标目录。" => i18n::tr(
             language,
             "验证内嵌载荷和目标目录。",
@@ -353,12 +441,20 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "ゲームの Win64 フォルダーを確認しています。",
         )
         .to_string(),
-        "下载 ProjectRebound" => {
-            i18n::tr(language, "下载 ProjectRebound", "Downloading ProjectRebound", "ProjectRebound をダウンロード中").to_string()
-        }
-        "校验 ProjectRebound" => {
-            i18n::tr(language, "校验 ProjectRebound", "Verifying ProjectRebound", "ProjectRebound を検証中").to_string()
-        }
+        "下载 ProjectRebound" => i18n::tr(
+            language,
+            "下载 ProjectRebound",
+            "Downloading ProjectRebound",
+            "ProjectRebound をダウンロード中",
+        )
+        .to_string(),
+        "校验 ProjectRebound" => i18n::tr(
+            language,
+            "校验 ProjectRebound",
+            "Verifying ProjectRebound",
+            "ProjectRebound を検証中",
+        )
+        .to_string(),
         "检查在线包内的 Payload.dll 和包装器。" => i18n::tr(
             language,
             "检查在线包内的 Payload.dll 和包装器。",
@@ -366,9 +462,13 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "オンラインパッケージ内の Payload.dll とラッパーを確認しています。",
         )
         .to_string(),
-        "准备登录服务器" => {
-            i18n::tr(language, "准备登录服务器", "Preparing login server", "ログインサーバー準備中").to_string()
-        }
+        "准备登录服务器" => i18n::tr(
+            language,
+            "准备登录服务器",
+            "Preparing login server",
+            "ログインサーバー準備中",
+        )
+        .to_string(),
         "从 GitHub 下载 BoundaryMetaServer。" => i18n::tr(
             language,
             "从 GitHub 下载 BoundaryMetaServer。",
@@ -383,10 +483,20 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "BoundaryMetaServer をダウンロード中",
         )
         .to_string(),
-        "登录服务器已准备" => {
-            i18n::tr(language, "登录服务器已准备", "Login server ready", "ログインサーバー準備完了").to_string()
-        }
-        "准备 Node.js" => i18n::tr(language, "准备 Node.js", "Preparing Node.js", "Node.js 準備中").to_string(),
+        "登录服务器已准备" => i18n::tr(
+            language,
+            "登录服务器已准备",
+            "Login server ready",
+            "ログインサーバー準備完了",
+        )
+        .to_string(),
+        "准备 Node.js" => i18n::tr(
+            language,
+            "准备 Node.js",
+            "Preparing Node.js",
+            "Node.js 準備中",
+        )
+        .to_string(),
         "查询最新 LTS 运行时。" => i18n::tr(
             language,
             "查询最新 LTS 运行时。",
@@ -394,9 +504,27 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "最新の LTS ランタイムを確認しています。",
         )
         .to_string(),
-        "下载 Node.js" => i18n::tr(language, "下载 Node.js", "Downloading Node.js", "Node.js をダウンロード中").to_string(),
-        "Node.js 已准备" => i18n::tr(language, "Node.js 已准备", "Node.js ready", "Node.js 準備完了").to_string(),
-        "准备写入文件" => i18n::tr(language, "准备写入文件", "Preparing file writes", "ファイル書き込み準備中").to_string(),
+        "下载 Node.js" => i18n::tr(
+            language,
+            "下载 Node.js",
+            "Downloading Node.js",
+            "Node.js をダウンロード中",
+        )
+        .to_string(),
+        "Node.js 已准备" => i18n::tr(
+            language,
+            "Node.js 已准备",
+            "Node.js ready",
+            "Node.js 準備完了",
+        )
+        .to_string(),
+        "准备写入文件" => i18n::tr(
+            language,
+            "准备写入文件",
+            "Preparing file writes",
+            "ファイル書き込み準備中",
+        )
+        .to_string(),
         "关闭相关运行进程并清理旧配置。" => i18n::tr(
             language,
             "关闭相关运行进程并清理旧配置。",
@@ -404,7 +532,13 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "関連実行プロセスを停止し、古い設定をクリーンアップしています。",
         )
         .to_string(),
-        "写入安装文件" => i18n::tr(language, "写入安装文件", "Writing install files", "インストールファイルを書き込み中").to_string(),
+        "写入安装文件" => i18n::tr(
+            language,
+            "写入安装文件",
+            "Writing install files",
+            "インストールファイルを書き込み中",
+        )
+        .to_string(),
         "安装登录服务器依赖" => i18n::tr(
             language,
             "安装登录服务器依赖",
@@ -412,14 +546,20 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "ログインサーバー依存関係をインストール中",
         )
         .to_string(),
-        "执行 npm ci --omit=dev，首次安装需要联网下载 npm 包。" => i18n::tr(
+        "执行 npm ci --omit=dev，使用国内 npm 源下载依赖。" => i18n::tr(
             language,
-            "执行 npm ci --omit=dev，首次安装需要联网下载 npm 包。",
-            "Running npm ci --omit=dev. The first install needs network access for npm packages.",
-            "npm ci --omit=dev を実行しています。初回インストールでは npm パッケージのダウンロードが必要です。",
+            "执行 npm ci --omit=dev，使用国内 npm 源下载依赖。",
+            "Running npm ci --omit=dev with the China npm mirror.",
+            "国内 npm ミラーを使って npm ci --omit=dev を実行しています。",
         )
         .to_string(),
-        "写入安装记录" => i18n::tr(language, "写入安装记录", "Writing install record", "インストール記録を書き込み中").to_string(),
+        "写入安装记录" => i18n::tr(
+            language,
+            "写入安装记录",
+            "Writing install record",
+            "インストール記録を書き込み中",
+        )
+        .to_string(),
         "生成 state.json 和安装标记。" => i18n::tr(
             language,
             "生成 state.json 和安装标记。",
@@ -427,7 +567,9 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "state.json とインストールマーカーを生成しています。",
         )
         .to_string(),
-        "安装完成" => i18n::tr(language, "安装完成", "Install complete", "インストール完了").to_string(),
+        "安装完成" => {
+            i18n::tr(language, "安装完成", "Install complete", "インストール完了").to_string()
+        }
         "社区服文件已写入目标目录。" => i18n::tr(
             language,
             "社区服文件已写入目标目录。",
@@ -442,12 +584,33 @@ fn localize_install_text(text: &str, language: i32) -> String {
         ),
         value if value.starts_with("下载完成：") => format!(
             "{}{}",
-            i18n::tr(language, "下载完成：", "Download complete: ", "ダウンロード完了: "),
+            i18n::tr(
+                language,
+                "下载完成：",
+                "Download complete: ",
+                "ダウンロード完了: "
+            ),
             value.trim_start_matches("下载完成：")
         ),
         value if value.contains("：已下载 ") => value
-            .replace("Windows 运行时 zip", i18n::tr(language, "Windows 运行时 zip", "Windows runtime zip", "Windows ランタイム zip"))
-            .replace("：已下载 ", i18n::tr(language, "：已下载 ", ": downloaded ", ": ダウンロード済み ")),
+            .replace(
+                "Windows 运行时 zip",
+                i18n::tr(
+                    language,
+                    "Windows 运行时 zip",
+                    "Windows runtime zip",
+                    "Windows ランタイム zip",
+                ),
+            )
+            .replace(
+                "：已下载 ",
+                i18n::tr(
+                    language,
+                    "：已下载 ",
+                    ": downloaded ",
+                    ": ダウンロード済み ",
+                ),
+            ),
         value => value.to_string(),
     }
 }

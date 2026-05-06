@@ -1,4 +1,4 @@
-import { Action, DetailRow, Panel, TitleBlock, Txt } from "../components.slint";
+import { Action, DetailRow, Panel, TextField, TitleBlock, Txt } from "../components.slint";
 import { I18n } from "../i18n.slint";
 
 component LanguageChoice inherits Rectangle {
@@ -44,9 +44,15 @@ export component SettingsPage inherits Rectangle {
     in property <string> server_status_text;
     in property <bool> update_checking;
     in property <string> update_status_text;
+    in-out property <string> github_proxy_text;
+    in property <bool> github_proxy_loading;
+    in property <string> github_proxy_status_text;
     in property <int> language;
     callback open_logs_clicked();
     callback check_updates_clicked();
+    callback github_proxy_changed(proxy: string);
+    callback open_github_proxy_dialog_clicked();
+    callback refresh_github_proxies_clicked();
     callback language_changed(language: int);
 
     // 页面 3：工具状态和日志入口。
@@ -85,6 +91,39 @@ export component SettingsPage inherits Rectangle {
                     enabled: !busy;
                     accent: #a8d8ff;
                     clicked => { root.open_logs_clicked(); }
+                }
+
+                TitleBlock {
+                    title: I18n.tr("下载代理", "Download Proxy", "ダウンロードプロキシ");
+                    sub: github_proxy_status_text;
+                }
+
+                VerticalLayout {
+                    height: 118px;
+                    spacing: 10px;
+
+                    Action {
+                        label: I18n.tr("选择代理节点", "Select Proxy Node", "プロキシノードを選択");
+                        sub: github_proxy_text == "" ? I18n.tr("直连 GitHub", "Direct GitHub", "GitHub へ直接接続") : github_proxy_text;
+                        enabled: !busy && !github_proxy_loading;
+                        accent: #62e2c1;
+                        clicked => { root.open_github_proxy_dialog_clicked(); }
+                    }
+
+                    Action {
+                        label: github_proxy_loading ? I18n.tr("刷新并测速中", "Refreshing and Testing", "更新と測定中") : I18n.tr("刷新代理列表", "Refresh Proxy List", "プロキシ一覧を更新");
+                        sub: I18n.tr("重新获取节点并测试延迟", "Fetch nodes and test latency", "ノードを取得して遅延を測定");
+                        enabled: !busy && !github_proxy_loading;
+                        accent: #a8d8ff;
+                        clicked => { root.refresh_github_proxies_clicked(); }
+                    }
+                }
+
+                TextField {
+                    text <=> root.github_proxy_text;
+                    placeholder: "https://git-proxy.cubland.icu/";
+                    enabled: !busy;
+                    edited(text) => { root.github_proxy_changed(text); }
                 }
 
                 Rectangle {

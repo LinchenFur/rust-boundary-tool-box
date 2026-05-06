@@ -2,7 +2,7 @@
 //
 // 具体视觉组件拆在 components.slint、rows.slint 和 models.slint 中。
 
-import { PortRow, DriveRow, ServerRow, VntPeerRow, VntServerRow } from "models.slint";
+import { PortRow, DriveRow, ProxyRow, ServerRow, VntPeerRow, VntServerRow } from "models.slint";
 import { StartPage } from "pages/start_page.slint";
 import { DirectoryPage } from "pages/directory_page.slint";
 import { DiagnosticsPage } from "pages/diagnostics_page.slint";
@@ -10,7 +10,7 @@ import { VntPage } from "pages/vnt_page.slint";
 import { SettingsPage } from "pages/settings_page.slint";
 import { ServersPage } from "pages/servers_page.slint";
 import { ShellHeader } from "header.slint";
-import { AppDialog, DriveScanDialog, InstallProgressDialog } from "dialogs.slint";
+import { AppDialog, DriveScanDialog, InstallProgressDialog, ProxySelectDialog } from "dialogs.slint";
 import { Txt, WindowButton } from "components.slint";
 import { I18n } from "i18n.slint";
 
@@ -24,7 +24,7 @@ export component AppWindow inherits Window {
     resize-border-width: 6px;
 
     // 页面索引：0 启动，1 目录，2 诊断，3 设置，4 服务器，5 VNT 联机。
-    property <int> page: 0;
+    in-out property <int> page: 0;
 
     // 启动页和目录页共享的目录/安装状态。
     in-out property <string> payload_label: "";
@@ -37,17 +37,21 @@ export component AppWindow inherits Window {
     in-out property <bool> show_logs: false;
     in-out property <string> log_text: "";
     in-out property <bool> busy: false;
+    in-out property <bool> is_admin: true;
     in-out property <bool> pulse: false;
     in-out property <bool> install_progress_visible: false;
     in-out property <float> install_progress_value: 0.0;
     in-out property <string> install_progress_percent: "0%";
     in-out property <string> install_progress_title: "";
     in-out property <string> install_progress_detail: "";
+    in-out property <int> install_progress_detail_lines: 1;
     in-out property <bool> show_drive_dialog: false;
+    in-out property <bool> show_github_proxy_dialog: false;
     in-out property <bool> show_app_dialog: false;
     in-out property <bool> app_dialog_confirm: false;
     in-out property <bool> app_dialog_input: false;
     in-out property <bool> app_dialog_error: false;
+    in-out property <int> app_dialog_text_lines: 1;
     in-out property <string> app_dialog_title: "";
     in-out property <string> app_dialog_text: "";
     in-out property <string> app_dialog_input_text: "";
@@ -60,6 +64,10 @@ export component AppWindow inherits Window {
     in-out property <string> server_status_text: I18n.tr("服务器列表：未刷新", "Server list: not refreshed", "サーバー一覧: 未更新");
     in-out property <bool> update_checking: false;
     in-out property <string> update_status_text: I18n.tr("更新：未检查", "Update: not checked", "更新: 未確認");
+    in-out property <string> github_proxy_text: "";
+    in-out property <[ProxyRow]> github_proxy_rows;
+    in-out property <bool> github_proxy_loading: false;
+    in-out property <string> github_proxy_status_text: "";
 
     // 用于 VNT 联机的状态和选项。
     in-out property <string> vnt_server_text: "101.35.230.139:6660";
@@ -108,6 +116,10 @@ export component AppWindow inherits Window {
     // 远程服务器和 VNT 回调。
     callback check_updates_clicked();
     callback refresh_servers_clicked();
+    callback github_proxy_changed(proxy: string);
+    callback github_proxy_selected(proxy: string);
+    callback open_github_proxy_dialog_clicked();
+    callback refresh_github_proxies_clicked();
     callback vnt_start_clicked();
     callback vnt_stop_clicked();
     callback vnt_refresh_clicked();
@@ -121,9 +133,11 @@ export component AppWindow inherits Window {
     callback drive_toggled(index: int, checked: bool);
     callback drive_confirmed();
     callback drive_cancelled();
+    callback github_proxy_dialog_cancelled();
     callback app_dialog_primary();
     callback app_dialog_secondary();
     callback install_progress_closed();
+    callback install_progress_cancelled();
     callback window_drag_started();
     callback window_minimize_clicked();
     callback window_close_clicked();
@@ -208,6 +222,41 @@ export component AppWindow inherits Window {
                 page <=> root.page;
                 has_target: root.has_target;
                 pulse: root.pulse;
+                busy: root.busy;
+            }
+
+            if !root.is_admin : Rectangle {
+                height: 42px;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: #8f6127;
+                background: #3a2712;
+
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 14px;
+                    spacing: 10px;
+
+                    Rectangle {
+                        width: 4px;
+                        height: 22px;
+                        border-radius: 2px;
+                        background: #f6c76d;
+                    }
+
+                    Txt {
+                        text: I18n.tr("未使用管理员模式启动", "Not started as administrator", "管理者モードで起動していません");
+                        color: #ffe0a3;
+                        font-size: 14px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: #00000000;
+                    }
+                }
             }
 
             content := Rectangle {
@@ -220,6 +269,7 @@ export component AppWindow inherits Window {
                     visible: root.page == 0;
                     has_target: root.has_target;
                     busy: root.busy;
+                    is_admin: root.is_admin;
                     auto_mode: root.auto_mode;
                     status_text: root.status_text;
                     target_text: root.target_text;
@@ -309,9 +359,15 @@ export component AppWindow inherits Window {
                     server_status_text: root.server_status_text;
                     update_checking: root.update_checking;
                     update_status_text: root.update_status_text;
+                    github_proxy_text <=> root.github_proxy_text;
+                    github_proxy_loading: root.github_proxy_loading;
+                    github_proxy_status_text: root.github_proxy_status_text;
                     language: root.language;
                     open_logs_clicked => { root.open_logs_clicked(); }
                     check_updates_clicked => { root.check_updates_clicked(); }
+                    github_proxy_changed(proxy) => { root.github_proxy_changed(proxy); }
+                    open_github_proxy_dialog_clicked => { root.open_github_proxy_dialog_clicked(); }
+                    refresh_github_proxies_clicked => { root.refresh_github_proxies_clicked(); }
                     language_changed(language) => { root.language_changed(language); }
                 }
 
@@ -335,7 +391,9 @@ export component AppWindow inherits Window {
             percent: root.install_progress_percent;
             title: root.install_progress_title;
             detail: root.install_progress_detail;
+            detail_lines: root.install_progress_detail_lines;
             close_clicked => { root.install_progress_closed(); }
+            cancel_clicked => { root.install_progress_cancelled(); }
         }
 
         if show_drive_dialog : DriveScanDialog {
@@ -348,12 +406,25 @@ export component AppWindow inherits Window {
             drive_cancelled => { root.drive_cancelled(); }
         }
 
+        if show_github_proxy_dialog : ProxySelectDialog {
+            width: parent.width;
+            height: parent.height;
+            busy: root.busy;
+            loading: root.github_proxy_loading;
+            status_text: root.github_proxy_status_text;
+            proxy_rows: root.github_proxy_rows;
+            proxy_selected(url) => { root.github_proxy_selected(url); }
+            proxy_refresh_clicked => { root.refresh_github_proxies_clicked(); }
+            proxy_cancelled => { root.github_proxy_dialog_cancelled(); }
+        }
+
         if show_app_dialog : AppDialog {
             width: parent.width;
             height: parent.height;
             app_dialog_confirm: root.app_dialog_confirm;
             app_dialog_input: root.app_dialog_input;
             app_dialog_error: root.app_dialog_error;
+            app_dialog_text_lines: root.app_dialog_text_lines;
             app_dialog_title: root.app_dialog_title;
             app_dialog_text: root.app_dialog_text;
             app_dialog_input_text <=> root.app_dialog_input_text;

@@ -321,27 +321,34 @@ fn process_exists(pid: u32) -> bool {
 }
 
 fn process_image_exists(image_name: &str) -> bool {
-    let needle = image_name.to_ascii_lowercase();
     let mut system = System::new_all();
     system.refresh_all();
     system
         .processes()
         .values()
-        .any(|process| process.name().to_string_lossy().to_ascii_lowercase() == needle)
+        .any(|process| process_name_matches(&process.name().to_string_lossy(), image_name))
 }
 
 fn process_pids_by_image(image_name: &str) -> Vec<u32> {
-    let needle = image_name.to_ascii_lowercase();
     let mut system = System::new_all();
     system.refresh_all();
     system
         .processes()
         .iter()
         .filter_map(|(pid, process)| {
-            (process.name().to_string_lossy().to_ascii_lowercase() == needle)
+            process_name_matches(&process.name().to_string_lossy(), image_name)
                 .then_some(pid.as_u32())
         })
         .collect()
+}
+
+fn process_name_matches(process_name: &str, image_name: &str) -> bool {
+    let process_name = process_name.to_ascii_lowercase();
+    let image_name = image_name.to_ascii_lowercase();
+    if process_name == image_name {
+        return true;
+    }
+    process_name.trim_end_matches(".exe") == image_name.trim_end_matches(".exe")
 }
 
 /// 选择最有用的 taskkill 诊断文本。
@@ -372,8 +379,51 @@ pub(crate) fn launch_files(target_win64: &Path) -> LaunchFiles {
 
 /// 用于进程匹配的规范化小写路径。
 pub(crate) fn path_match_key(path: &Path) -> String {
-    path.canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .to_lowercase()
+    path_text_match_key(
+        &path
+            .canonicalize()
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy(),
+    )
+}
+
+/// 规范化从进程表拿到的路径/命令行文本，和 `path_match_key` 保持同一格式。
+pub(crate) fn path_text_match_key(value: &str) -> String {
+    let mut key = value
+        .trim()
+        .trim_matches('"')
+        .replace('/', "\\")
+        .to_lowercase();
+    key = key.replace("\\\\?\\unc\\", "\\\\");
+    key = key.replace("\\\\?\\", "");
+    key
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_text_match_key_strips_windows_extended_prefix() {
+        assert_eq!(
+            path_text_match_key(r#"\\?\D:\SteamLibrary\steamapps\common\Boundary"#),
+            r#"d:\steamlibrary\steamapps\common\boundary"#
+        );
+        assert_eq!(
+            path_text_match_key(r#"\\?\UNC\server\share\Boundary"#),
+            r#"\\server\share\boundary"#
+        );
+    }
+
+    #[test]
+    fn process_name_matches_with_or_without_exe_suffix() {
+        assert!(process_name_matches(
+            "ProjectReboundServerWrapper",
+            "ProjectReboundServerWrapper.exe"
+        ));
+        assert!(process_name_matches(
+            "ProjectBoundarySteam-Win64-Shipping.exe",
+            "ProjectBoundarySteam-Win64-Shipping"
+        ));
+    }
 }

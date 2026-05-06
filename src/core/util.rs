@@ -10,6 +10,9 @@ use std::process::{Command, Stdio};
 
 use anyhow::Result;
 use chrono::Local;
+use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
+use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 /// 供 UI 和日志使用的本地时间戳。
 pub fn now_text() -> String {
@@ -57,4 +60,27 @@ pub(crate) fn hidden_command(program: impl AsRef<OsStr>) -> Command {
 /// 单独封装 taskkill，便于统一参数和后续测试。
 pub(crate) fn hidden_taskkill_command() -> Command {
     hidden_command("taskkill")
+}
+
+/// 判断当前进程是否以管理员提升权限运行。
+pub fn is_running_as_administrator() -> bool {
+    unsafe {
+        let mut token = Default::default();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+            return false;
+        }
+
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut returned = 0u32;
+        let result = GetTokenInformation(
+            token,
+            TokenElevation,
+            Some((&mut elevation as *mut TOKEN_ELEVATION).cast()),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut returned,
+        );
+        let _ = CloseHandle(token);
+
+        result.is_ok() && elevation.TokenIsElevated != 0
+    }
 }

@@ -23,7 +23,6 @@ use super::util::ensure_dir;
 use super::*;
 
 const FONTS_REGISTRY_PATH: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts";
-const GITHUB_PROXY_PREFIX: &str = "https://git-proxy.cubland.icu/";
 
 #[derive(Debug, Deserialize)]
 struct GitHubRelease {
@@ -89,7 +88,9 @@ impl InstallerCore {
         ensure_dir(&cache_dir)?;
         let zip_path = cache_dir.join(&asset.zip_name);
         let expected_sha = match &asset.sha_url {
-            Some(url) => download_text(url).ok().and_then(|text| parse_sha256(&text)),
+            Some(url) => download_text(&self.proxied_github_url(url))
+                .ok()
+                .and_then(|text| parse_sha256(&text)),
             None => None,
         };
 
@@ -109,7 +110,7 @@ impl InstallerCore {
             ));
         }
 
-        let bytes = download_bytes(&proxied_github_url(&asset.zip_url))?;
+        let bytes = download_bytes(&self.proxied_github_url(&asset.zip_url))?;
         if let Some(expected) = expected_sha {
             let actual = sha256_hex(&bytes);
             if !actual.eq_ignore_ascii_case(&expected) {
@@ -197,14 +198,6 @@ fn download_bytes(url: &str) -> Result<Vec<u8>> {
         .bytes()
         .with_context(|| format!("读取下载内容失败：{url}"))?;
     Ok(bytes.to_vec())
-}
-
-fn proxied_github_url(url: &str) -> String {
-    if url.starts_with("https://github.com/") {
-        format!("{GITHUB_PROXY_PREFIX}{url}")
-    } else {
-        url.to_string()
-    }
 }
 
 fn parse_sha256(text: &str) -> Option<String> {

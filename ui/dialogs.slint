@@ -1,7 +1,7 @@
 import { LineEdit, ListView, ScrollView } from "std-widgets.slint";
-import { DriveRow } from "models.slint";
+import { DriveRow, ProxyRow } from "models.slint";
 import { Action, InputBox, Panel, ProgressBox, TitleBlock, Txt } from "components.slint";
-import { DriveLine } from "rows.slint";
+import { DriveLine, ProxyLine } from "rows.slint";
 import { I18n } from "i18n.slint";
 
 export component DriveScanDialog inherits Rectangle {
@@ -15,9 +15,16 @@ export component DriveScanDialog inherits Rectangle {
         height: parent.height;
         background: #05070bcc;
 
-        Panel {
-            width: 560px;
-            height: 520px;
+        dialog := Panel {
+            property <length> max-panel-width: root.width > 64px ? root.width - 64px : root.width;
+            property <length> max-panel-height: root.height > 64px ? root.height - 64px : root.height;
+            property <length> fixed-height: 182px;
+            property <length> natural-list-height: drive_rows.length <= 0 ? 64px : 20px + 58px * drive_rows.length;
+            property <length> available-list-height: max-panel-height > fixed-height + 64px ? max-panel-height - fixed-height : 64px;
+            property <length> list-height: min(natural-list-height, available-list-height);
+
+            width: min(560px, max-panel-width);
+            height: min(max-panel-height, fixed-height + list-height);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             radius: 24px;
@@ -32,7 +39,7 @@ export component DriveScanDialog inherits Rectangle {
                 }
 
                 Panel {
-                    vertical-stretch: 1;
+                    height: dialog.list-height;
                     fill: #0f131a;
                     radius: 18px;
 
@@ -79,10 +86,112 @@ export component DriveScanDialog inherits Rectangle {
     }
 }
 
+export component ProxySelectDialog inherits Rectangle {
+    in property <bool> busy;
+    in property <bool> loading;
+    in property <string> status_text;
+    in property <[ProxyRow]> proxy_rows;
+    callback proxy_selected(url: string);
+    callback proxy_refresh_clicked();
+    callback proxy_cancelled();
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #05070bd9;
+
+        dialog := Panel {
+            property <length> max-panel-width: root.width > 64px ? root.width - 64px : root.width;
+            property <length> max-panel-height: root.height > 64px ? root.height - 64px : root.height;
+            property <length> fixed-height: 178px;
+            property <length> natural-list-height: proxy_rows.length <= 0 ? 72px : 18px + 68px * proxy_rows.length;
+            property <length> available-list-height: max-panel-height > fixed-height + 64px ? max-panel-height - fixed-height : 64px;
+            property <length> list-height: min(natural-list-height, available-list-height);
+
+            width: min(760px, max-panel-width);
+            height: min(max-panel-height, fixed-height + list-height);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            radius: 24px;
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+
+                TitleBlock {
+                    title: I18n.tr("选择下载代理", "Select Download Proxy", "ダウンロードプロキシを選択");
+                    sub: status_text;
+                }
+
+                Panel {
+                    height: dialog.list-height;
+                    fill: #0f131a;
+                    radius: 18px;
+
+                    if proxy_rows.length <= 0 : Txt {
+                        x: 18px;
+                        y: 0px;
+                        width: parent.width - 36px;
+                        height: parent.height;
+                        text: loading
+                            ? I18n.tr("正在获取代理列表...", "Loading proxy list...", "プロキシ一覧を読み込み中...")
+                            : I18n.tr("暂无代理节点", "No proxy nodes", "プロキシノードがありません");
+                        color: #95a3b8;
+                        font-size: 13px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+
+                    if proxy_rows.length > 0 : ListView {
+                        x: 12px;
+                        y: 10px;
+                        width: parent.width - 24px;
+                        height: parent.height - 20px;
+
+                        for proxy[index] in proxy_rows: ProxyLine {
+                            url: proxy.url;
+                            latency: proxy.latency;
+                            state: proxy.state;
+                            current: proxy.current;
+                            selected => { root.proxy_selected(proxy.url); }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    height: 58px;
+                    spacing: 12px;
+
+                    Action {
+                        width: 132px;
+                        label: loading ? I18n.tr("测速中", "Testing", "測定中") : I18n.tr("刷新延迟", "Refresh Ping", "遅延を更新");
+                        sub: "";
+                        enabled: !busy && !loading;
+                        accent: #a8d8ff;
+                        clicked => { root.proxy_refresh_clicked(); }
+                    }
+
+                    Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+                    Action {
+                        width: 132px;
+                        label: I18n.tr("取消", "Cancel", "キャンセル");
+                        sub: "";
+                        enabled: !busy;
+                        accent: #ffb4ab;
+                        clicked => { root.proxy_cancelled(); }
+                    }
+                }
+            }
+        }
+    }
+}
+
 export component AppDialog inherits Rectangle {
     in property <bool> app_dialog_confirm;
     in property <bool> app_dialog_input;
     in property <bool> app_dialog_error;
+    in property <int> app_dialog_text_lines: 1;
     in property <string> app_dialog_title;
     in property <string> app_dialog_text;
     in-out property <string> app_dialog_input_text;
@@ -95,9 +204,16 @@ export component AppDialog inherits Rectangle {
         height: parent.height;
         background: #05070bd9;
 
-        Panel {
-            width: 560px;
-            height: app_dialog_input ? 360px : (app_dialog_confirm ? 318px : 292px);
+        dialog := Panel {
+            property <length> max-panel-width: root.width > 64px ? root.width - 64px : root.width;
+            property <length> max-panel-height: root.height > 64px ? root.height - 64px : root.height;
+            property <length> fixed-height: app_dialog_input ? 246px : 186px;
+            property <length> natural-text-height: app_dialog_text_lines <= 1 ? 34px : app_dialog_text_lines * 22px;
+            property <length> available-text-height: max-panel-height > fixed-height + 56px ? max-panel-height - fixed-height : 56px;
+            property <length> text-height: min(natural-text-height, available-text-height);
+
+            width: min(680px, max-panel-width);
+            height: min(max-panel-height, fixed-height + text-height);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             radius: 24px;
@@ -131,12 +247,15 @@ export component AppDialog inherits Rectangle {
                 }
 
                 ScrollView {
-                    vertical-stretch: 1;
+                    height: dialog.text-height;
+                    viewport-width: self.width;
+                    viewport-height: dialog.natural-text-height;
 
                     Txt {
                         x: 0px;
                         y: 0px;
                         width: parent.width;
+                        height: dialog.natural-text-height;
                         text: app_dialog_text;
                         color: #dbeafe;
                         font-size: 14px;
@@ -194,16 +313,23 @@ export component InstallProgressDialog inherits Rectangle {
     in property <string> percent: "0%";
     in property <string> title: "";
     in property <string> detail: "";
+    in property <int> detail_lines: 1;
     callback close_clicked();
+    callback cancel_clicked();
 
     Rectangle {
         width: parent.width;
         height: parent.height;
         background: #05070bd9;
 
-        Panel {
-            width: 560px;
-            height: 280px;
+        dialog := Panel {
+            property <length> max-panel-width: root.width > 64px ? root.width - 64px : root.width;
+            property <length> max-panel-height: root.height > 64px ? root.height - 64px : root.height;
+            property <length> progress-height: 78px + min(detail_lines <= 1 ? 18px : detail_lines * 18px, 88px);
+            property <length> natural-height: 166px + progress-height;
+
+            width: min(560px, max-panel-width);
+            height: min(max-panel-height, natural-height);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             radius: 24px;
@@ -223,6 +349,7 @@ export component InstallProgressDialog inherits Rectangle {
                     percent: root.percent;
                     title: root.title;
                     detail: root.detail;
+                    detail-lines: root.detail_lines;
                 }
 
                 HorizontalLayout {
@@ -233,11 +360,17 @@ export component InstallProgressDialog inherits Rectangle {
 
                     Action {
                         width: 156px;
-                        label: busy ? I18n.tr("安装中", "Installing", "インストール中") : I18n.tr("完成", "Done", "完了");
+                        label: busy ? I18n.tr("取消", "Cancel", "キャンセル") : I18n.tr("完成", "Done", "完了");
                         sub: "";
-                        enabled: !busy;
-                        accent: #62e2c1;
-                        clicked => { root.close_clicked(); }
+                        enabled: true;
+                        accent: busy ? #ffb4ab : #62e2c1;
+                        clicked => {
+                            if busy {
+                                root.cancel_clicked();
+                            } else {
+                                root.close_clicked();
+                            }
+                        }
                     }
                 }
             }

@@ -1,3 +1,4 @@
+import { ScrollView } from "std-widgets.slint";
 import { I18n } from "i18n.slint";
 
 export component Txt inherits Text {
@@ -108,20 +109,25 @@ export component StatusTag inherits Rectangle {
 export component NavTab inherits Rectangle {
     in property <string> label;
     in property <bool> selected: false;
+    in property <bool> enabled: true;
     callback clicked;
 
     height: 42px;
     border-radius: 14px;
     border-width: 1px;
-    border-color: selected ? #62e2c1 : (touch.has-hover ? #54617a : #273041);
-    background: selected ? #103b34 : (touch.has-hover ? #1d2531 : #0f131a);
+    border-color: enabled
+        ? (selected ? #62e2c1 : (touch.has-hover ? #54617a : #273041))
+        : #273041;
+    background: enabled
+        ? (selected ? #103b34 : (touch.has-hover ? #1d2531 : #0f131a))
+        : (selected ? #102620 : #0f131a88);
 
     animate background { duration: 120ms; }
     animate border-color { duration: 120ms; }
 
     Txt {
         text: label;
-        color: selected ? #c7fff2 : #c7d1df;
+        color: enabled ? (selected ? #c7fff2 : #c7d1df) : #687589;
         font-size: 14px;
         font-weight: 700;
         horizontal-alignment: center;
@@ -129,6 +135,7 @@ export component NavTab inherits Rectangle {
     }
 
     touch := TouchArea {
+        enabled: parent.enabled;
         clicked => { parent.clicked(); }
     }
 }
@@ -181,6 +188,7 @@ export component Action inherits Rectangle {
             ? (touch.pressed ? #43bfa3 : (touch.has-hover ? #82f6da : accent))
             : (touch.pressed ? #202a38 : (touch.has-hover ? #1d2531 : #0f131a)))
         : #0f131a88;
+    clip: true;
 
     animate background { duration: 140ms; }
     animate border-color { duration: 140ms; }
@@ -287,8 +295,11 @@ export component ProgressBox inherits Rectangle {
     in property <string> percent: "0%";
     in property <string> title: "";
     in property <string> detail: "";
+    in property <int> detail-lines: 1;
+    property <length> detail-natural-height: detail-lines <= 1 ? 18px : detail-lines * 18px;
+    property <length> detail-visible-height: min(detail-natural-height, 88px);
 
-    height: shown ? 104px : 0px;
+    height: shown ? 78px + detail-visible-height : 0px;
     border-radius: 14px;
     border-width: shown ? 1px : 0px;
     border-color: #273041;
@@ -344,12 +355,20 @@ export component ProgressBox inherits Rectangle {
             }
         }
 
-        Txt {
-            text: detail;
-            color: #aebbd0;
-            font-size: 12px;
-            font-weight: 600;
-            wrap: char-wrap;
+        ScrollView {
+            height: root.detail-visible-height;
+            viewport-width: self.width;
+            viewport-height: root.detail-natural-height;
+
+            Txt {
+                width: parent.width;
+                height: root.detail-natural-height;
+                text: detail;
+                color: #aebbd0;
+                font-size: 12px;
+                font-weight: 600;
+                wrap: char-wrap;
+            }
         }
     }
 }
@@ -424,6 +443,7 @@ export component ServerDropdown inherits Rectangle {
     in-out property <string> value;
     in property <[string]> options;
     in property <bool> enabled: true;
+    in property <string> placeholder: I18n.tr("选择服务器地址", "Select server address", "サーバーアドレスを選択");
     in-out property <bool> expanded: false;
     callback selected(value: string);
 
@@ -446,7 +466,7 @@ export component ServerDropdown inherits Rectangle {
             y: 0px;
             width: parent.width - 54px;
             height: parent.height;
-            text: value == "" ? I18n.tr("选择服务器地址", "Select server address", "サーバーアドレスを選択") : value;
+            text: value == "" ? root.placeholder : value;
             color: value == "" ? #77849a : #eef4fb;
             font-size: 14px;
             font-weight: 600;
@@ -480,7 +500,7 @@ export component ServerDropdown inherits Rectangle {
         x: 0px;
         y: 50px;
         width: root.width;
-        height: 8px + 40px * root.options.length;
+        height: min(8px + 40px * root.options.length, 360px);
         close-policy: close-on-click-outside;
 
         Rectangle {
@@ -492,33 +512,45 @@ export component ServerDropdown inherits Rectangle {
             background: #101721;
             clip: true;
 
-            for option[index] in root.options : Rectangle {
-                x: 4px;
-                y: 4px + 40px * index;
-                width: parent.width - 8px;
-                height: 36px;
-                border-radius: 11px;
-                background: option == root.value ? #103b34 : (item-touch.has-hover ? #1d2531 : #00000000);
+            ScrollView {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: self.width;
+                viewport-height: 8px + 40px * root.options.length;
 
-                Txt {
-                    x: 12px;
-                    y: 0px;
-                    width: parent.width - 24px;
-                    height: parent.height;
-                    text: option;
-                    color: option == root.value ? #c7fff2 : #dbeafe;
-                    font-size: 13px;
-                    font-weight: option == root.value ? 800 : 600;
-                    vertical-alignment: center;
-                    wrap: no-wrap;
-                }
+                Rectangle {
+                    width: parent.width;
+                    height: 8px + 40px * root.options.length;
 
-                item-touch := TouchArea {
-                    clicked => {
-                        root.value = option;
-                        root.expanded = false;
-                        root.selected(option);
-                        popup.close();
+                    for option[index] in root.options : Rectangle {
+                        x: 4px;
+                        y: 4px + 40px * index;
+                        width: parent.width - 8px;
+                        height: 36px;
+                        border-radius: 11px;
+                        background: option == root.value ? #103b34 : (item-touch.has-hover ? #1d2531 : #00000000);
+
+                        Txt {
+                            x: 12px;
+                            y: 0px;
+                            width: parent.width - 24px;
+                            height: parent.height;
+                            text: option;
+                            color: option == root.value ? #c7fff2 : #dbeafe;
+                            font-size: 13px;
+                            font-weight: option == root.value ? 800 : 600;
+                            vertical-alignment: center;
+                            wrap: no-wrap;
+                        }
+
+                        item-touch := TouchArea {
+                            clicked => {
+                                root.value = option;
+                                root.expanded = false;
+                                root.selected(option);
+                                popup.close();
+                            }
+                        }
                     }
                 }
             }

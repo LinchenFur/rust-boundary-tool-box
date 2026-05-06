@@ -2,7 +2,7 @@
 
 use crate::core;
 use crate::vnt_platform;
-use crate::{AppWindow, DriveRow, PortRow, ServerRow, VntPeerRow, VntServerRow};
+use crate::{AppWindow, DriveRow, PortRow, ProxyRow, ServerRow, VntPeerRow, VntServerRow};
 
 use std::cell::RefCell;
 use std::fs::{self, File, OpenOptions};
@@ -19,8 +19,8 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::core::{
-    APP_VERSION, InstallProgress, InstallerCore, LaunchMode, MONITORED_PORTS, PathMode,
-    PortConflict, PortStatusRow as CorePortStatusRow, format_port_conflicts,
+    APP_VERSION, InstallCancelToken, InstallProgress, InstallerCore, LaunchMode, MONITORED_PORTS,
+    PathMode, PortConflict, PortStatusRow as CorePortStatusRow, format_port_conflicts,
 };
 use crate::vnt_platform::{VntEvent, VntLaunchOptions, VntSession};
 
@@ -35,6 +35,7 @@ mod i18n;
 mod logging;
 mod messages;
 mod prefs;
+mod proxy_list;
 mod server_list;
 mod servers;
 mod target;
@@ -47,7 +48,9 @@ use background::spawn_port_thread;
 use diagnostics::{
     format_process_detection_message, runtime_snapshot_has_any, summarize_runtime_processes,
 };
+use dialogs::estimate_dialog_text_lines;
 use prefs::{AppPrefs, VntPrefs};
+use proxy_list::{GithubProxyOption, initial_github_proxy_rows, proxy_options_to_rows};
 use server_list::{RemoteServer, fetch_servers, server_placeholder_row, server_to_row};
 use update::{UpdateCheckResult, check_latest_release, update_dialog_text, update_status_text};
 use vnt_rows::{
@@ -77,6 +80,12 @@ enum AppMessage {
     PortRows(Vec<CorePortStatusRow>),
     ServerRows(Vec<RemoteServer>),
     ServerRowsFailed(String),
+    GithubProxyRows {
+        rows: Vec<GithubProxyOption>,
+        fetched_count: usize,
+        update_time: Option<String>,
+    },
+    GithubProxyRowsFailed(String),
     UpdateCheckFinished {
         result: UpdateCheckResult,
         automatic: bool,
@@ -131,10 +140,13 @@ struct AppController {
     drive_model: Rc<VecModel<DriveRow>>,
     port_model: Rc<VecModel<PortRow>>,
     server_model: Rc<VecModel<ServerRow>>,
+    github_proxy_model: Rc<VecModel<ProxyRow>>,
     vnt_server_option_model: Rc<VecModel<SharedString>>,
     vnt_server_model: Rc<VecModel<VntServerRow>>,
     vnt_peer_model: Rc<VecModel<VntPeerRow>>,
     vnt_session: Option<VntSession>,
     app_prefs: AppPrefs,
+    is_admin: bool,
+    install_cancel: Option<InstallCancelToken>,
     pending_dialog_action: PendingDialogAction,
 }

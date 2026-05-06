@@ -267,6 +267,105 @@ export component DriveLine inherits Rectangle {
     }
 }
 
+// GitHub 下载代理选择弹窗中的节点行。
+export component ProxyLine inherits Rectangle {
+    in property <string> url;
+    in property <string> latency;
+    in property <int> state: 0;
+    in property <bool> current: false;
+    callback selected();
+
+    property <brush> accent: current ? #9ef0b5 : (state == 1 ? #a8d8ff : (state == 2 ? #ffb4ab : #f6c76d));
+    property <brush> fill: current ? #0c2b1b : (touch.has-hover ? #161f2a : #0f131a);
+    property <string> status-text: current
+        ? I18n.tr("当前使用", "Current", "使用中")
+        : (state == 1
+            ? I18n.tr("可用", "Available", "利用可能")
+            : (state == 2 ? I18n.tr("连接失败", "Failed", "接続失敗") : I18n.tr("等待测速", "Waiting", "待機中")));
+
+    height: 68px;
+    background: #00000000;
+
+    Rectangle {
+        width: parent.width;
+        height: 62px;
+        y: 3px;
+        border-radius: 15px;
+        border-width: 1px;
+        border-color: current ? #9ef0b5 : (touch.has-hover ? accent : #344056);
+        background: fill;
+
+        animate background { duration: 120ms; }
+        animate border-color { duration: 120ms; }
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 6px;
+                background: #00000000;
+
+                Rectangle {
+                    width: parent.width;
+                    height: 34px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: accent;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                horizontal-stretch: 1;
+
+                Txt {
+                    text: url;
+                    color: #eef4fb;
+                    font-size: 13px;
+                    font-weight: 800;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+
+                Txt {
+                    text: status-text;
+                    color: current ? #b9f6c9 : #95a3b8;
+                    font-size: 11px;
+                    font-weight: 600;
+                    horizontal-stretch: 1;
+                    wrap: no-wrap;
+                }
+            }
+
+            Rectangle {
+                width: 94px;
+                height: 30px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: accent;
+                background: current ? #163b25 : #101721;
+
+                Txt {
+                    text: latency;
+                    color: accent;
+                    font-size: 12px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        clicked => { root.selected(); }
+    }
+}
+
 export component VntPeerLine inherits Rectangle {
     in property <string> name;
     in property <string> address;

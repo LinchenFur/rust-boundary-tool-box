@@ -12,8 +12,8 @@ use super::cleanup::clean_engine_ini;
 use super::pathing::validate_win64_path;
 use super::process::{
     collect_port_conflicts, format_port_conflicts, kill_pids, launch_files, path_match_key,
-    runtime_image_pids, runtime_process_pids, summarize_runtime_processes, taskkill_images,
-    taskkill_pids,
+    path_text_match_key, runtime_image_pids, runtime_process_pids, summarize_runtime_processes,
+    taskkill_images, taskkill_pids,
 };
 use super::util::hidden_command;
 use super::*;
@@ -89,7 +89,7 @@ impl InstallerCore {
         for process in system.processes().values() {
             let exe_lower = process
                 .exe()
-                .map(|path| path.to_string_lossy().to_lowercase())
+                .map(|path| path_text_match_key(&path.to_string_lossy()))
                 .unwrap_or_default();
             let name_lower = process.name().to_string_lossy().to_lowercase();
             let cmd = process
@@ -98,7 +98,7 @@ impl InstallerCore {
                 .map(|part| part.to_string_lossy().into_owned())
                 .collect::<Vec<_>>()
                 .join(" ");
-            let cmd_lower = cmd.to_lowercase();
+            let cmd_lower = path_text_match_key(&cmd);
             let item = RuntimeProcess {
                 pid: process.pid().as_u32(),
                 name: process.name().to_string_lossy().into_owned(),

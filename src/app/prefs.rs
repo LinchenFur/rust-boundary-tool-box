@@ -52,13 +52,29 @@ impl Default for VntPrefs {
     }
 }
 
+fn default_github_proxy_prefix() -> String {
+    crate::core::DEFAULT_GITHUB_PROXY_PREFIX.to_string()
+}
+
 /// 整个工具箱的应用级偏好设置。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AppPrefs {
     #[serde(default)]
     pub language: i32,
+    #[serde(default = "default_github_proxy_prefix")]
+    pub github_proxy_prefix: String,
     #[serde(default)]
     pub vnt: VntPrefs,
+}
+
+impl Default for AppPrefs {
+    fn default() -> Self {
+        Self {
+            language: 0,
+            github_proxy_prefix: default_github_proxy_prefix(),
+            vnt: VntPrefs::default(),
+        }
+    }
 }
 
 impl AppPrefs {
@@ -113,6 +129,8 @@ impl AppPrefs {
     /// 补齐默认 VNT 服务器，并去掉空白/重复项。
     fn normalize(&mut self) {
         self.language = self.language.clamp(0, 2);
+        self.github_proxy_prefix =
+            crate::core::normalize_github_proxy_prefix(&self.github_proxy_prefix);
 
         let mut normalized = Vec::new();
         for option in std::iter::once(self.vnt.server_text.as_str())

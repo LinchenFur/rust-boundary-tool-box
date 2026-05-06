@@ -14,7 +14,6 @@ const LATEST_RELEASE_API: &str =
 #[derive(Debug, Clone)]
 pub(crate) struct UpdateCheckResult {
     pub(crate) latest_tag: String,
-    pub(crate) latest_version: String,
     pub(crate) release_name: String,
     pub(crate) release_url: String,
     pub(crate) asset_url: Option<String>,
@@ -76,7 +75,6 @@ pub(crate) fn check_latest_release() -> Result<UpdateCheckResult> {
         asset_url,
         published_at: release.published_at.unwrap_or_else(|| "-".to_string()),
         is_newer: is_version_newer(&latest_version, APP_VERSION),
-        latest_version,
     })
 }
 
@@ -84,19 +82,15 @@ pub(crate) fn check_latest_release() -> Result<UpdateCheckResult> {
 pub(crate) fn update_status_text(result: &UpdateCheckResult, language: i32) -> String {
     if result.is_newer {
         format!(
-            "{}v{}",
-            crate::app::i18n::tr(
-                language,
-                "发现新版本：",
-                "New version: v",
-                "新バージョン: v"
-            ),
-            result.latest_version
+            "{}{}",
+            crate::app::i18n::tr(language, "发现新版本：", "New version: ", "新バージョン: "),
+            format_version_for_display(&result.latest_tag)
         )
     } else {
         format!(
-            "{}v{APP_VERSION}",
-            crate::app::i18n::tr(language, "已是最新：", "Up to date: v", "最新版です: v")
+            "{}{}",
+            crate::app::i18n::tr(language, "已是最新：", "Up to date: ", "最新版です: "),
+            format_version_for_display(APP_VERSION)
         )
     }
 }
@@ -111,16 +105,16 @@ pub(crate) fn update_dialog_text(result: &UpdateCheckResult, language: i32) -> S
     ));
     if result.is_newer {
         format!(
-            "{}{}\n{}v{}\n{}{}\n\n{}\n\n{}{}",
+            "{}{}\n{}{}\n{}{}\n\n{}\n\n{}{}",
             crate::app::i18n::tr(language, "发现新版本：", "New version: ", "新バージョン: "),
-            result.latest_tag,
+            format_version_for_display(&result.latest_tag),
             crate::app::i18n::tr(
                 language,
                 "当前版本：",
                 "Current version: ",
                 "現在のバージョン: "
             ),
-            APP_VERSION,
+            format_version_for_display(APP_VERSION),
             crate::app::i18n::tr(language, "发布时间：", "Published: ", "公開日時: "),
             result.published_at,
             result.release_name,
@@ -129,7 +123,7 @@ pub(crate) fn update_dialog_text(result: &UpdateCheckResult, language: i32) -> S
         )
     } else {
         format!(
-            "{}\n{}v{}\n{}{}\n{}{}\n\n{}",
+            "{}\n{}{}\n{}{}\n{}{}\n\n{}",
             crate::app::i18n::tr(
                 language,
                 "当前已经是最新版本。",
@@ -142,19 +136,27 @@ pub(crate) fn update_dialog_text(result: &UpdateCheckResult, language: i32) -> S
                 "Current version: ",
                 "現在のバージョン: "
             ),
-            APP_VERSION,
+            format_version_for_display(APP_VERSION),
             crate::app::i18n::tr(
                 language,
                 "最新 Release：",
                 "Latest release: ",
                 "最新 Release: "
             ),
-            result.latest_tag,
+            format_version_for_display(&result.latest_tag),
             crate::app::i18n::tr(language, "发布时间：", "Published: ", "公開日時: "),
             result.published_at,
             result.release_url
         )
     }
+}
+
+fn format_version_for_display(value: &str) -> String {
+    value
+        .trim()
+        .trim_start_matches(['v', 'V'])
+        .trim()
+        .to_string()
 }
 
 fn normalize_version(value: &str) -> String {

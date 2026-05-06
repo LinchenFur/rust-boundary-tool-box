@@ -237,9 +237,30 @@ impl AppController {
         }
     }
 
+    /// 更新 GitHub 下载代理前缀，并立即保存到应用配置。
+    pub(super) fn set_github_proxy_prefix(&mut self, proxy: String) {
+        let normalized = core::normalize_github_proxy_prefix(&proxy);
+        self.core.set_github_proxy_prefix(&normalized);
+        self.app_prefs.github_proxy_prefix = normalized;
+        self.sync_github_proxy_current_selection();
+        self.save_app_prefs();
+    }
+
+    /// 从代理选择弹窗选中节点后写回设置并关闭弹窗。
+    pub(super) fn select_github_proxy_from_dialog(&mut self, proxy: String) {
+        let normalized = core::normalize_github_proxy_prefix(&proxy);
+        self.ui.set_github_proxy_text(normalized.clone().into());
+        self.set_github_proxy_prefix(normalized);
+        self.ui.set_show_github_proxy_dialog(false);
+    }
+
     /// 保存应用级偏好设置；失败只写日志，不打断用户操作。
     pub(super) fn save_app_prefs(&mut self) {
         self.app_prefs.vnt = self.current_vnt_prefs();
+        self.app_prefs.github_proxy_prefix =
+            core::normalize_github_proxy_prefix(&self.ui.get_github_proxy_text());
+        self.core
+            .set_github_proxy_prefix(&self.app_prefs.github_proxy_prefix);
         if let Err(error) = self.app_prefs.save(&self.core.installer_home) {
             self.append_log(&format!(
                 "[{}] 应用配置保存失败：{}",
