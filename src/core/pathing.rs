@@ -160,7 +160,7 @@ pub fn normalize_selected_path(raw_path: &Path) -> Result<PathBuf> {
 }
 
 /// 从 HKCU/HKLM 注册表键读取常见 Steam 安装根目录。
-fn steam_registry_paths() -> Vec<PathBuf> {
+pub(crate) fn steam_registry_paths() -> Vec<PathBuf> {
     let mut results = Vec::new();
     let registry_candidates = [
         (HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),

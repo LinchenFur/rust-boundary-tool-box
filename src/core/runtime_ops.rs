@@ -344,6 +344,7 @@ impl InstallerCore {
 
     /// 根据用户选择启动 PVP 或 PVE。
     pub fn launch(&self, target_win64: &Path, mode: LaunchMode) -> Result<String> {
+        self.ensure_steam_ready_for_launch()?;
         match mode {
             LaunchMode::Pvp => self.launch_pvp(target_win64),
             LaunchMode::Pve => self.launch_pve(target_win64),
