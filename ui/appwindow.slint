@@ -11,7 +11,7 @@ import { SettingsPage } from "pages/settings_page.slint";
 import { ServersPage } from "pages/servers_page.slint";
 import { ShellHeader } from "header.slint";
 import { AppDialog, DriveScanDialog, InstallProgressDialog, ProxySelectDialog } from "dialogs.slint";
-import { Txt, WindowButton } from "components.slint";
+import { ImageLightbox, MamaButton, Txt, WindowButton } from "components.slint";
 import { I18n } from "i18n.slint";
 
 export component AppWindow inherits Window {
@@ -48,6 +48,7 @@ export component AppWindow inherits Window {
     in-out property <bool> show_drive_dialog: false;
     in-out property <bool> show_github_proxy_dialog: false;
     in-out property <bool> show_app_dialog: false;
+    in-out property <bool> show_mama_image: false;
     in-out property <bool> app_dialog_confirm: false;
     in-out property <bool> app_dialog_input: false;
     in-out property <bool> app_dialog_error: false;
@@ -380,6 +381,12 @@ export component AppWindow inherits Window {
                     server_rows: root.page == 4 ? root.server_rows : [];
                     refresh_servers_clicked => { root.refresh_servers_clicked(); }
                 }
+
+                if root.page == 0 : MamaButton {
+                    x: parent.width - self.width - 22px;
+                    y: parent.height - self.height - 22px;
+                    clicked => { root.show_mama_image = true; }
+                }
             }
         }
 
@@ -432,6 +439,13 @@ export component AppWindow inherits Window {
             app_dialog_secondary_text: root.app_dialog_secondary_text;
             app_dialog_primary => { root.app_dialog_primary(); }
             app_dialog_secondary => { root.app_dialog_secondary(); }
+        }
+
+        if show_mama_image : ImageLightbox {
+            width: parent.width;
+            height: parent.height;
+            image: @image-url("assets/gm.png");
+            closed => { root.show_mama_image = false; }
         }
     }
 }
