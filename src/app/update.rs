@@ -3,12 +3,13 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use regex::Regex;
 use serde::Deserialize;
 
 use crate::core::APP_VERSION;
 
-const LATEST_RELEASE_API: &str =
-    "https://api.github.com/repos/LinchenFur/rust-boundary-tool-box/releases/latest";
+const RELEASES_API: &str =
+    "https://api.github.com/repos/LinchenFur/rust-boundary-tool-box/releases";
 
 /// GitHub 最新 release 的检查结果。
 #[derive(Debug, Clone)]
@@ -28,6 +29,8 @@ struct GitHubRelease {
     html_url: String,
     published_at: Option<String>,
     #[serde(default)]
+    draft: bool,
+    #[serde(default)]
     assets: Vec<GitHubAsset>,
 }
 
@@ -37,24 +40,25 @@ struct GitHubAsset {
     browser_download_url: String,
 }
 
-/// 请求 GitHub latest release，并和当前版本比较。
+/// 请求 GitHub 最新发布的 Release，并和当前版本比较。
 pub(crate) fn check_latest_release() -> Result<UpdateCheckResult> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(12))
         .build()
         .context("创建更新检查 HTTP 客户端失败")?;
     let text = client
-        .get(LATEST_RELEASE_API)
+        .get(RELEASES_API)
         .header("User-Agent", format!("boundary-toolbox/{APP_VERSION}"))
         .header("Accept", "application/vnd.github+json")
         .send()
-        .context("请求 GitHub 最新 Release 失败")?
+        .context("请求 GitHub Release 列表失败")?
         .error_for_status()
-        .context("GitHub 最新 Release 接口返回错误")?
+        .context("GitHub Release 列表接口返回错误")?
         .text()
-        .context("读取 GitHub 最新 Release 响应失败")?;
-    let release = serde_json::from_str::<GitHubRelease>(&text)
-        .context("解析 GitHub 最新 Release 响应失败")?;
+        .context("读取 GitHub Release 列表响应失败")?;
+    let releases = serde_json::from_str::<Vec<GitHubRelease>>(&text)
+        .context("解析 GitHub Release 列表失败")?;
+    let release = select_latest_visible_release(releases).context("GitHub 没有可用 Release")?;
     let latest_version = normalize_version(&release.tag_name);
     let asset_url = release
         .assets
@@ -167,9 +171,16 @@ fn normalize_version(value: &str) -> String {
         .to_string()
 }
 
+fn select_latest_visible_release(releases: Vec<GitHubRelease>) -> Option<GitHubRelease> {
+    releases.into_iter().find(|release| !release.draft)
+}
+
 fn is_version_newer(latest: &str, current: &str) -> bool {
     let latest_parts = version_parts(latest);
     let current_parts = version_parts(current);
+    if latest_parts.is_empty() {
+        return false;
+    }
     let max_len = latest_parts.len().max(current_parts.len());
     for index in 0..max_len {
         let latest_value = *latest_parts.get(index).unwrap_or(&0);
@@ -182,14 +193,61 @@ fn is_version_newer(latest: &str, current: &str) -> bool {
 }
 
 fn version_parts(value: &str) -> Vec<u64> {
-    normalize_version(value)
-        .split(['.', '-', '+'])
-        .map(|part| {
-            part.chars()
-                .take_while(char::is_ascii_digit)
-                .collect::<String>()
-                .parse::<u64>()
-                .unwrap_or(0)
-        })
+    let Ok(regex) = Regex::new(r"\d+") else {
+        return Vec::new();
+    };
+    regex
+        .find_iter(&normalize_version(value))
+        .filter_map(|part| part.as_str().parse::<u64>().ok())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compares_plain_and_v_prefixed_versions() {
+        assert!(is_version_newer("v19.19.84", "19.19.83"));
+        assert!(!is_version_newer("v19.19.84", "19.19.84"));
+    }
+
+    #[test]
+    fn compares_beta_prefixed_versions() {
+        assert!(is_version_newer("beta19.19.85", "19.19.84"));
+        assert!(!is_version_newer("beta19.19.83", "19.19.84"));
+    }
+
+    #[test]
+    fn extracts_numeric_parts_from_mixed_tags() {
+        assert_eq!(
+            version_parts("release-v19.19.84-hotfix.2"),
+            vec![19, 19, 84, 2]
+        );
+    }
+
+    #[test]
+    fn selects_first_non_draft_release() {
+        let releases = vec![
+            GitHubRelease {
+                tag_name: "v99.0.0".to_string(),
+                name: None,
+                html_url: "https://example.invalid/draft".to_string(),
+                published_at: None,
+                draft: true,
+                assets: Vec::new(),
+            },
+            GitHubRelease {
+                tag_name: "beta19.19.85".to_string(),
+                name: None,
+                html_url: "https://example.invalid/release".to_string(),
+                published_at: None,
+                draft: false,
+                assets: Vec::new(),
+            },
+        ];
+
+        let release = select_latest_visible_release(releases).expect("visible release");
+        assert_eq!(release.tag_name, "beta19.19.85");
+    }
 }
