@@ -546,13 +546,15 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "ログインサーバー依存関係をインストール中",
         )
         .to_string(),
-        "执行 npm ci --omit=dev，使用国内 npm 源下载依赖。" => i18n::tr(
-            language,
-            "执行 npm ci --omit=dev，使用国内 npm 源下载依赖。",
-            "Running npm ci --omit=dev with the China npm mirror.",
-            "国内 npm ミラーを使って npm ci --omit=dev を実行しています。",
-        )
-        .to_string(),
+        "执行 npm ci --omit=dev --ignore-scripts，使用国内 npm 源下载依赖。" => {
+            i18n::tr(
+                language,
+                "执行 npm ci --omit=dev --ignore-scripts，使用国内 npm 源下载依赖。",
+                "Running npm ci --omit=dev --ignore-scripts with the China npm mirror.",
+                "国内 npm ミラーを使って npm ci --omit=dev --ignore-scripts を実行しています。",
+            )
+            .to_string()
+        }
         "写入安装记录" => i18n::tr(
             language,
             "写入安装记录",

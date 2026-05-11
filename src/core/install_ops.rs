@@ -1,6 +1,8 @@
 //! InstallerCore 安装、更新和卸载流程。
 
 use std::collections::{HashMap, HashSet};
+use std::env;
+use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::path::Path;
 use std::process::Stdio;
@@ -9,6 +11,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use chrono::Local;
+use encoding_rs::GBK;
 use uuid::Uuid;
 
 use super::cleanup::{clean_engine_ini, clean_legacy_range_mod};
@@ -228,7 +231,7 @@ impl InstallerCore {
                     &progress,
                     (item_value + 0.02).min(0.92),
                     "安装登录服务器依赖",
-                    "执行 npm ci --omit=dev，使用国内 npm 源下载依赖。",
+                    "执行 npm ci --omit=dev --ignore-scripts，使用国内 npm 源下载依赖。",
                 );
                 self.install_boundary_meta_server_dependencies(
                     &target_path,
@@ -453,6 +456,7 @@ impl InstallerCore {
 
         let npm_cache = self.installer_home.join("npm-cache");
         ensure_dir(&npm_cache)?;
+        let npm_path = npm_script_path(node_dir, server_dir);
         self.log(format!(
             "安装 BoundaryMetaServer npm 依赖：{}，registry={}",
             server_dir.display(),
@@ -463,6 +467,7 @@ impl InstallerCore {
             .arg(&npm_cli)
             .arg("ci")
             .arg("--omit=dev")
+            .arg("--ignore-scripts")
             .arg("--no-audit")
             .arg("--no-fund")
             .arg("--loglevel=error")
@@ -473,6 +478,11 @@ impl InstallerCore {
             .env("npm_config_cache", &npm_cache)
             .env("npm_config_registry", NPM_REGISTRY_URL)
             .env("npm_config_replace_registry_host", "always")
+            .env("npm_config_ignore_scripts", "true")
+            .env("npm_config_scripts_prepend_node_path", "true")
+            .env("npm_config_node", node_exe)
+            .env("NODE", node_exe)
+            .env("PATH", npm_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -590,8 +600,8 @@ fn format_size(bytes: u64) -> String {
 }
 
 fn command_output_text(stdout: &[u8], stderr: &[u8], code: Option<i32>) -> String {
-    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(stdout).trim().to_string();
+    let stderr = decode_process_output(stderr).trim().to_string();
+    let stdout = decode_process_output(stdout).trim().to_string();
     let text = if !stderr.is_empty() {
         stderr
     } else if !stdout.is_empty() {
@@ -606,6 +616,34 @@ fn command_output_text(stdout: &[u8], stderr: &[u8], code: Option<i32>) -> Strin
     trim_process_output(&text)
 }
 
+fn decode_process_output(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return text.to_string();
+    }
+    let (decoded, _, _) = GBK.decode(bytes);
+    decoded.into_owned()
+}
+
+fn npm_script_path(node_dir: &Path, server_dir: &Path) -> OsString {
+    let existing_path = env::var_os("PATH").or_else(|| env::var_os("Path"));
+    build_npm_script_path(node_dir, server_dir, existing_path.as_deref())
+}
+
+fn build_npm_script_path(node_dir: &Path, server_dir: &Path, existing: Option<&OsStr>) -> OsString {
+    let mut paths = vec![
+        node_dir.to_path_buf(),
+        node_dir.join("node_modules").join("npm").join("bin"),
+        server_dir.join("node_modules").join(".bin"),
+    ];
+    if let Some(existing) = existing {
+        paths.extend(env::split_paths(existing));
+    }
+    env::join_paths(paths).unwrap_or_else(|_| node_dir.as_os_str().to_os_string())
+}
+
 fn trim_process_output(text: &str) -> String {
     const MAX_LEN: usize = 1600;
     if text.chars().count() <= MAX_LEN {
@@ -614,4 +652,36 @@ fn trim_process_output(text: &str) -> String {
     let mut trimmed = text.chars().take(MAX_LEN).collect::<String>();
     trimmed.push_str("...");
     trimmed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn npm_script_path_prefers_embedded_node() {
+        let node_dir = PathBuf::from(r"C:\Boundary\nodejs");
+        let server_dir = PathBuf::from(r"C:\Boundary\BoundaryMetaServer-main");
+        let existing = OsStr::new(r"C:\Windows\System32;C:\Windows");
+        let value = build_npm_script_path(&node_dir, &server_dir, Some(existing));
+        let paths = env::split_paths(&value).collect::<Vec<_>>();
+
+        assert_eq!(paths[0], node_dir);
+        assert_eq!(
+            paths[1],
+            PathBuf::from(r"C:\Boundary\nodejs\node_modules\npm\bin")
+        );
+        assert_eq!(
+            paths[2],
+            PathBuf::from(r"C:\Boundary\BoundaryMetaServer-main\node_modules\.bin")
+        );
+    }
+
+    #[test]
+    fn decodes_gbk_process_output() {
+        let (bytes, _, _) = GBK.encode("'node' 不是内部或外部命令");
+
+        assert!(decode_process_output(&bytes).contains("不是内部或外部命令"));
+    }
 }
