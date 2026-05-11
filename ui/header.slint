@@ -4,6 +4,7 @@ import { I18n } from "i18n.slint";
 export component ShellHeader inherits Rectangle {
     in-out property <int> page;
     in property <bool> has_target;
+    in property <bool> is_admin: true;
     in property <bool> pulse;
     in property <bool> busy: false;
         HorizontalLayout {
@@ -87,12 +88,17 @@ export component ShellHeader inherits Rectangle {
             Rectangle { horizontal-stretch: 1; background: #00000000; }
 
             StatusTag {
-                title: has_target ? I18n.tr("就绪", "READY", "準備完了") : I18n.tr("等待", "WAIT", "待機");
-                sub: has_target
+                width: is_admin ? 144px : 184px;
+                title: !is_admin
+                    ? I18n.tr("权限受限", "ADMIN REQUIRED", "権限が必要")
+                    : (has_target ? I18n.tr("就绪", "READY", "準備完了") : I18n.tr("等待", "WAIT", "待機"));
+                sub: !is_admin
+                    ? I18n.tr("请以管理员启动", "Run as administrator", "管理者として起動")
+                    : (has_target
                     ? I18n.tr("目标目录已锁定", "Target path locked", "対象パス設定済み")
-                    : I18n.tr("等待目标目录", "Waiting for target", "対象パス待ち");
-                accent: has_target ? #9ef0b5 : #f6c76d;
-                opacity: has_target ? 1.0 : (pulse ? 0.72 : 1.0);
+                    : I18n.tr("等待目标目录", "Waiting for target", "対象パス待ち"));
+                accent: !is_admin ? #f6c76d : (has_target ? #9ef0b5 : #f6c76d);
+                opacity: !is_admin || has_target ? 1.0 : (pulse ? 0.72 : 1.0);
             }
         }
 }

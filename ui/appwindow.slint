@@ -222,42 +222,9 @@ export component AppWindow inherits Window {
                 height: 64px;
                 page <=> root.page;
                 has_target: root.has_target;
+                is_admin: root.is_admin;
                 pulse: root.pulse;
                 busy: root.busy;
-            }
-
-            if !root.is_admin : Rectangle {
-                height: 42px;
-                border-radius: 8px;
-                border-width: 1px;
-                border-color: #8f6127;
-                background: #3a2712;
-
-                HorizontalLayout {
-                    padding-left: 14px;
-                    padding-right: 14px;
-                    spacing: 10px;
-
-                    Rectangle {
-                        width: 4px;
-                        height: 22px;
-                        border-radius: 2px;
-                        background: #f6c76d;
-                    }
-
-                    Txt {
-                        text: I18n.tr("未使用管理员模式启动", "Not started as administrator", "管理者モードで起動していません");
-                        color: #ffe0a3;
-                        font-size: 14px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                    }
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        background: #00000000;
-                    }
-                }
             }
 
             content := Rectangle {
