@@ -43,6 +43,7 @@ mod update;
 mod updates;
 mod vnt_controller;
 mod vnt_rows;
+mod window;
 
 use background::spawn_port_thread;
 use diagnostics::{
@@ -61,6 +62,7 @@ use vnt_rows::{
 pub(crate) fn run() -> Result<()> {
     logging::install_log_filter();
     let app = AppWindow::new()?;
+    window::apply_adaptive_window_geometry(&app);
     let controller = AppController::new(app)?;
     AppController::bind_callbacks(&controller);
     AppController::start_background_timers(&controller);
