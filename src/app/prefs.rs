@@ -65,6 +65,8 @@ fn default_language_preference() -> i32 {
 pub(crate) struct AppPrefs {
     #[serde(default = "default_language_preference")]
     pub language: i32,
+    #[serde(default)]
+    language_default_migrated: bool,
     #[serde(default = "default_github_proxy_prefix")]
     pub github_proxy_prefix: String,
     #[serde(default)]
@@ -75,6 +77,7 @@ impl Default for AppPrefs {
     fn default() -> Self {
         Self {
             language: default_language_preference(),
+            language_default_migrated: true,
             github_proxy_prefix: default_github_proxy_prefix(),
             vnt: VntPrefs::default(),
         }
@@ -132,6 +135,7 @@ impl AppPrefs {
 
     /// 补齐默认 VNT 服务器，并去掉空白/重复项。
     fn normalize(&mut self) {
+        self.migrate_language_default();
         self.language = crate::app::i18n::normalize_language_preference(self.language);
         self.github_proxy_prefix =
             crate::core::normalize_github_proxy_prefix(&self.github_proxy_prefix);
@@ -161,6 +165,17 @@ impl AppPrefs {
             self.vnt.server_text = self.vnt.server_text.trim().to_string();
         }
         self.vnt.network_code = self.vnt.network_code.trim().to_string();
+    }
+
+    /// 19.19.90 之前的配置会把默认中文写成 language=0；升级后应迁到自动。
+    fn migrate_language_default(&mut self) {
+        if self.language_default_migrated {
+            return;
+        }
+        if self.language == crate::app::i18n::LANGUAGE_ZH {
+            self.language = crate::app::i18n::LANGUAGE_AUTO;
+        }
+        self.language_default_migrated = true;
     }
 }
 
@@ -245,4 +260,46 @@ fn path_to_wide(path: &Path) -> Vec<u16> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_language_preference_is_auto() {
+        assert_eq!(
+            AppPrefs::default().language,
+            crate::app::i18n::LANGUAGE_AUTO
+        );
+    }
+
+    #[test]
+    fn migrates_old_chinese_default_to_auto_once() {
+        let mut prefs = AppPrefs {
+            language: crate::app::i18n::LANGUAGE_ZH,
+            language_default_migrated: false,
+            github_proxy_prefix: String::new(),
+            vnt: VntPrefs::default(),
+        };
+
+        prefs.normalize();
+
+        assert_eq!(prefs.language, crate::app::i18n::LANGUAGE_AUTO);
+        assert!(prefs.language_default_migrated);
+    }
+
+    #[test]
+    fn keeps_manual_chinese_after_migration_marker() {
+        let mut prefs = AppPrefs {
+            language: crate::app::i18n::LANGUAGE_ZH,
+            language_default_migrated: true,
+            github_proxy_prefix: String::new(),
+            vnt: VntPrefs::default(),
+        };
+
+        prefs.normalize();
+
+        assert_eq!(prefs.language, crate::app::i18n::LANGUAGE_ZH);
+    }
 }
