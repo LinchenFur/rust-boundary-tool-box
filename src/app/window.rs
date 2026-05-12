@@ -16,6 +16,7 @@ const MIN_COMFORT_HEIGHT: f32 = 600.0;
 const WIDTH_FILL: f32 = 0.92;
 const HEIGHT_FILL: f32 = 0.90;
 const EMERGENCY_FILL: f32 = 0.96;
+const EDGE_MARGIN_PHYSICAL: i32 = 24;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct WorkArea {
@@ -46,8 +47,14 @@ fn calculate_adaptive_window_geometry(
     dpi_scale: f32,
 ) -> AdaptiveWindowGeometry {
     let dpi_scale = dpi_scale.max(1.0);
-    let available_width = work_area.width as f32 / dpi_scale;
-    let available_height = work_area.height as f32 / dpi_scale;
+    let margin = EDGE_MARGIN_PHYSICAL
+        .min(work_area.width as i32 / 8)
+        .min(work_area.height as i32 / 8)
+        .max(0);
+    let usable_width = (work_area.width as i32 - margin * 2).max(1) as u32;
+    let usable_height = (work_area.height as i32 - margin * 2).max(1) as u32;
+    let available_width = usable_width as f32 / dpi_scale;
+    let available_height = usable_height as f32 / dpi_scale;
     let logical_width = adaptive_length(
         available_width,
         DEFAULT_WIDTH,
@@ -63,8 +70,8 @@ fn calculate_adaptive_window_geometry(
     let physical_width = (logical_width * dpi_scale).round() as i32;
     let physical_height = (logical_height * dpi_scale).round() as i32;
     let physical_position = PhysicalPosition::new(
-        work_area.left + ((work_area.width as i32 - physical_width).max(0) / 2),
-        work_area.top + ((work_area.height as i32 - physical_height).max(0) / 2),
+        work_area.left + margin + ((usable_width as i32 - physical_width).max(0) / 2),
+        work_area.top + margin + ((usable_height as i32 - physical_height).max(0) / 2),
     );
 
     AdaptiveWindowGeometry {
@@ -153,9 +160,9 @@ mod tests {
             1.0,
         );
 
-        assert_eq!(geometry.logical_size.width, 1257.0);
-        assert_eq!(geometry.logical_size.height, 655.0);
-        assert_eq!(geometry.physical_position.y, 36);
+        assert_eq!(geometry.logical_size.width, 1213.0);
+        assert_eq!(geometry.logical_size.height, 612.0);
+        assert_eq!(geometry.physical_position.y, 58);
     }
 
     #[test]
@@ -170,8 +177,8 @@ mod tests {
             1.5,
         );
 
-        assert_eq!(geometry.logical_size.width, 1178.0);
-        assert_eq!(geometry.logical_size.height, 624.0);
-        assert_eq!(geometry.physical_position.y, 52);
+        assert_eq!(geometry.logical_size.width, 1148.0);
+        assert_eq!(geometry.logical_size.height, 600.0);
+        assert_eq!(geometry.physical_position.y, 70);
     }
 }
