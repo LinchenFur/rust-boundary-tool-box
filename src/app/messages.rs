@@ -110,7 +110,7 @@ impl AppController {
                         self.show_confirm_dialog(
                             title,
                             &update_dialog_text(&result, self.language()),
-                            self.tr("下载更新", "Download Update", "更新をダウンロード"),
+                            self.tr("立即更新", "Update Now", "今すぐ更新"),
                             self.tr("稍后", "Later", "後で"),
                             PendingDialogAction::DownloadUpdate { result },
                         );
@@ -139,54 +139,49 @@ impl AppController {
                     };
                     self.show_error_dialog(title, &error);
                 }
-                AppMessage::UpdateDownloadFinished { tag, path } => {
+                AppMessage::UpdateRestartScheduled { tag } => {
                     self.ui.set_busy(false);
                     self.ui.set_update_checking(false);
                     self.ui.set_update_status_text(
                         format!(
                             "{}{}",
-                            self.tr(
-                                "更新：已下载 ",
-                                "Update downloaded: ",
-                                "更新をダウンロード済み: ",
-                            ),
+                            self.tr("更新：正在重启 ", "Update restarting: ", "更新再起動中: ",),
                             tag
                         )
                         .into(),
                     );
                     self.append_log(&format!(
-                        "[{}] 更新已下载：{} -> {}",
+                        "[{}] 已安排自动替换并重启：{}",
                         core::now_text(),
                         tag,
-                        path.display()
                     ));
                     self.ui.set_install_progress_visible(true);
                     self.ui.set_install_progress_cancelable(false);
                     self.ui.set_install_progress_dialog_title(
-                        self.tr("下载更新", "Download Update", "更新をダウンロード")
-                            .into(),
+                        self.tr("立即更新", "Update Now", "今すぐ更新").into(),
                     );
                     self.ui.set_install_progress_value(1.0);
                     self.ui.set_install_progress_percent("100%".into());
                     self.ui.set_install_progress_title(
-                        self.tr("下载完成", "Download Complete", "ダウンロード完了")
-                            .into(),
+                        self.tr("准备重启", "Restarting", "再起動準備中").into(),
                     );
                     self.set_install_progress_detail_text(&format!(
-                        "{}\n{}\n\n{}",
+                        "{}\n{}",
                         self.tr(
-                            "更新文件已下载。",
-                            "The update file has been downloaded.",
-                            "更新ファイルをダウンロードしました。",
+                            "更新文件已下载并通过校验。",
+                            "The update file has been downloaded and verified.",
+                            "更新ファイルのダウンロードと検証が完了しました。",
                         ),
-                        path.display(),
                         self.tr(
-                            "关闭当前程序后运行新文件即可更新。",
-                            "Close this toolbox and run the new file to update.",
-                            "現在のツールを閉じて新しいファイルを実行すると更新できます。",
+                            "工具箱将关闭，更新助手会替换当前文件并重新启动。",
+                            "The toolbox will close; the update helper will replace this executable and restart it.",
+                            "ツールボックスを閉じ、更新ヘルパーが現在の実行ファイルを置き換えて再起動します。",
                         )
                     ));
                     self.hide_app_dialog();
+                    self.stop_background.store(true, Ordering::Relaxed);
+                    let _ = self.ui.hide();
+                    let _ = slint::quit_event_loop();
                 }
                 AppMessage::UpdateDownloadFailed(error) => {
                     self.ui.set_busy(false);
@@ -712,6 +707,34 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "保存更新文件",
             "Saving update",
             "更新ファイルを保存中",
+        )
+        .to_string(),
+        "准备替换更新" => i18n::tr(
+            language,
+            "准备替换更新",
+            "Preparing replacement",
+            "置き換え準備中",
+        )
+        .to_string(),
+        "正在生成自动替换脚本。" => i18n::tr(
+            language,
+            "正在生成自动替换脚本。",
+            "Generating the automatic replacement script.",
+            "自動置き換えスクリプトを生成しています。",
+        )
+        .to_string(),
+        "准备重启" => i18n::tr(
+            language,
+            "准备重启",
+            "Restarting",
+            "再起動準備中",
+        )
+        .to_string(),
+        "工具箱将关闭，更新助手会替换当前文件并重新启动。" => i18n::tr(
+            language,
+            "工具箱将关闭，更新助手会替换当前文件并重新启动。",
+            "The toolbox will close; the update helper will replace this executable and restart it.",
+            "ツールボックスを閉じ、更新ヘルパーが現在の実行ファイルを置き換えて再起動します。",
         )
         .to_string(),
         "下载失败" => {

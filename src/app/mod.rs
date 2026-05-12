@@ -54,8 +54,8 @@ use prefs::{AppPrefs, VntPrefs};
 use proxy_list::{GithubProxyOption, initial_github_proxy_rows, proxy_options_to_rows};
 use server_list::{RemoteServer, fetch_servers, server_placeholder_row, server_to_row};
 use update::{
-    UpdateCheckResult, check_latest_release, download_release_asset, update_dialog_text,
-    update_status_text,
+    UpdateCheckResult, check_latest_release, download_release_asset,
+    schedule_self_replace_and_restart, update_dialog_text, update_status_text,
 };
 use vnt_rows::{
     apply_vnt_idle_to_ui, localized_vnt_idle_snapshot, vnt_peer_to_row, vnt_placeholder_rows,
@@ -99,9 +99,8 @@ enum AppMessage {
         error: String,
         automatic: bool,
     },
-    UpdateDownloadFinished {
+    UpdateRestartScheduled {
         tag: String,
-        path: PathBuf,
     },
     UpdateDownloadFailed(String),
     VntEvent(VntEvent),

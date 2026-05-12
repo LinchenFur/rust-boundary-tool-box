@@ -2,14 +2,17 @@
 
 use std::fs::{self, File};
 use std::io::{Read, Write};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::Deserialize;
 
-use crate::core::{APP_VERSION, InstallProgress, ProgressReporter};
+use crate::core::{APP_VERSION, CREATE_NO_WINDOW, InstallProgress, ProgressReporter};
 
 const RELEASES_API: &str =
     "https://api.github.com/repos/LinchenFur/rust-boundary-tool-box/releases";
@@ -128,6 +131,140 @@ pub(crate) fn download_release_asset(
                 .with_context(|| format!("下载到运行目录失败：{primary_error}"))
         }
     }
+}
+
+/// 生成并启动外部更新助手，等待当前进程退出后替换当前 exe 并重启。
+pub(crate) fn schedule_self_replace_and_restart(
+    downloaded_path: &Path,
+    script_dir: &Path,
+    progress: ProgressReporter,
+) -> Result<()> {
+    report_update_progress(&progress, 0.985, "准备替换更新", "正在生成自动替换脚本。");
+    validate_downloaded_exe(downloaded_path)?;
+
+    let current_exe = std::env::current_exe().context("获取当前程序路径失败")?;
+    let current_dir = current_exe
+        .parent()
+        .map(Path::to_path_buf)
+        .context("当前程序路径没有父目录")?;
+    let exe_name = current_exe
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("boundary_toolbox.exe");
+    fs::create_dir_all(script_dir)
+        .with_context(|| format!("创建更新脚本目录失败：{}", script_dir.display()))?;
+    let backup_path = current_exe.with_file_name(format!("{exe_name}.old"));
+    let log_path = script_dir.join("self_update.log");
+    let script_path = script_dir.join(format!("apply_update_{}.ps1", std::process::id()));
+    let script = build_self_update_script(
+        std::process::id(),
+        downloaded_path,
+        &current_exe,
+        &backup_path,
+        &current_dir,
+        &log_path,
+    );
+    fs::write(&script_path, script)
+        .with_context(|| format!("写入更新脚本失败：{}", script_path.display()))?;
+
+    let mut command = Command::new("powershell");
+    command
+        .arg("-NoProfile")
+        .arg("-ExecutionPolicy")
+        .arg("Bypass")
+        .arg("-WindowStyle")
+        .arg("Hidden")
+        .arg("-File")
+        .arg(&script_path);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+        .spawn()
+        .with_context(|| format!("启动更新助手失败：{}", script_path.display()))?;
+    report_update_progress(
+        &progress,
+        1.0,
+        "准备重启",
+        "工具箱将关闭，更新助手会替换当前文件并重新启动。",
+    );
+    Ok(())
+}
+
+fn build_self_update_script(
+    process_id: u32,
+    source: &Path,
+    target: &Path,
+    backup: &Path,
+    working_dir: &Path,
+    log_path: &Path,
+) -> String {
+    format!(
+        r#"$ErrorActionPreference = 'Stop'
+$ProcessIdToWait = {process_id}
+$Source = {source}
+$Target = {target}
+$Backup = {backup}
+$WorkingDir = {working_dir}
+$LogPath = {log_path}
+function Write-UpdateLog([string]$Text) {{
+    $line = '[{{0}}] {{1}}' -f (Get-Date -Format o), $Text
+    Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value $line
+}}
+try {{
+    Write-UpdateLog 'waiting for current process to exit'
+    for ($i = 0; $i -lt 160; $i++) {{
+        $running = Get-Process -Id $ProcessIdToWait -ErrorAction SilentlyContinue
+        if ($null -eq $running) {{ break }}
+        Start-Sleep -Milliseconds 250
+    }}
+    if ($null -ne (Get-Process -Id $ProcessIdToWait -ErrorAction SilentlyContinue)) {{
+        throw 'current process did not exit in time'
+    }}
+    for ($try = 0; $try -lt 80; $try++) {{
+        try {{
+            if (!(Test-Path -LiteralPath $Source -PathType Leaf)) {{
+                throw ('update source missing: ' + $Source)
+            }}
+            if (Test-Path -LiteralPath $Backup) {{
+                Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
+            }}
+            if (Test-Path -LiteralPath $Target) {{
+                Move-Item -LiteralPath $Target -Destination $Backup -Force
+            }}
+            Move-Item -LiteralPath $Source -Destination $Target -Force
+            Write-UpdateLog 'replacement complete; restarting'
+            Start-Process -FilePath $Target -WorkingDirectory $WorkingDir
+            if (Test-Path -LiteralPath $Backup) {{
+                Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
+            }}
+            Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+            exit 0
+        }} catch {{
+            Write-UpdateLog ('replace attempt ' + $try + ' failed: ' + $_.Exception.Message)
+            if ((Test-Path -LiteralPath $Backup -PathType Leaf) -and !(Test-Path -LiteralPath $Target)) {{
+                Move-Item -LiteralPath $Backup -Destination $Target -Force -ErrorAction SilentlyContinue
+            }}
+            Start-Sleep -Milliseconds 250
+        }}
+    }}
+    throw 'could not replace executable'
+}} catch {{
+    Write-UpdateLog ('fatal: ' + $_.Exception.ToString())
+    exit 1
+}}
+"#,
+        process_id = process_id,
+        source = powershell_single_quoted_path(source),
+        target = powershell_single_quoted_path(target),
+        backup = powershell_single_quoted_path(backup),
+        working_dir = powershell_single_quoted_path(working_dir),
+        log_path = powershell_single_quoted_path(log_path),
+    )
+}
+
+fn powershell_single_quoted_path(path: &Path) -> String {
+    let text = path.to_string_lossy().replace('\'', "''");
+    format!("'{text}'")
 }
 
 fn release_asset_file_name(tag: &str) -> String {
@@ -320,7 +457,7 @@ pub(crate) fn update_dialog_text(result: &UpdateCheckResult, language: i32) -> S
     ));
     if result.is_newer {
         format!(
-            "{}{}\n{}{}\n{}{}\n\n{}\n\n{}{}",
+            "{}{}\n{}{}\n{}{}\n\n{}\n\n{}\n\n{}{}",
             crate::app::i18n::tr(language, "发现新版本：", "New version: ", "新バージョン: "),
             format_version_for_display(&result.latest_tag),
             crate::app::i18n::tr(
@@ -333,6 +470,12 @@ pub(crate) fn update_dialog_text(result: &UpdateCheckResult, language: i32) -> S
             crate::app::i18n::tr(language, "发布时间：", "Published: ", "公開日時: "),
             result.published_at,
             result.release_name,
+            crate::app::i18n::tr(
+                language,
+                "点击立即更新后会自动下载、替换当前程序并重启。",
+                "Click Update Now to download, replace this executable, and restart automatically.",
+                "今すぐ更新をクリックすると、自動でダウンロード、置き換え、再起動します。",
+            ),
             crate::app::i18n::tr(language, "下载地址：", "Download: ", "ダウンロード: "),
             download
         )
@@ -472,5 +615,11 @@ mod tests {
             release_asset_file_name("release v19/19/91"),
             "boundary_toolbox-release_v19_19_91.exe"
         );
+    }
+
+    #[test]
+    fn escapes_powershell_single_quoted_paths() {
+        let escaped = powershell_single_quoted_path(Path::new(r"C:\O'Brien\tool.exe"));
+        assert_eq!(escaped, r"'C:\O''Brien\tool.exe'");
     }
 }
