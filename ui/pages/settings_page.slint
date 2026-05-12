@@ -1,5 +1,34 @@
+import { ScrollView } from "std-widgets.slint";
 import { Action, DetailRow, Panel, TextField, TitleBlock, Txt } from "../components.slint";
 import { I18n } from "../i18n.slint";
+
+component SettingsSection inherits Rectangle {
+    in property <string> title;
+    in property <string> sub: "";
+
+    height: sub == "" ? 30px : 44px;
+    background: #00000000;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: 2px;
+
+        Txt {
+            text: title;
+            color: #eef4fb;
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        if sub != "" : Txt {
+            text: sub;
+            color: #95a3b8;
+            font-size: 11px;
+            font-weight: 600;
+            wrap: char-wrap;
+        }
+    }
+}
 
 component LanguageChoice inherits Rectangle {
     in property <int> code;
@@ -11,7 +40,7 @@ component LanguageChoice inherits Rectangle {
     property <bool> selected: language-mode == code;
     property <bool> enabled-state: language-mode != code;
 
-    height: 58px;
+    height: 50px;
     border-radius: 14px;
     border-width: 1px;
     border-color: selected ? accent : (touch.has-hover ? #54617a : #344056);
@@ -22,7 +51,7 @@ component LanguageChoice inherits Rectangle {
 
     Image {
         width: min(parent.width - 18px, 58px);
-        height: 38px;
+        height: 32px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         source: flag;
@@ -43,7 +72,7 @@ component AutoLanguageChoice inherits Rectangle {
     property <bool> selected: language-mode == -1;
     property <bool> enabled-state: language-mode != -1;
 
-    height: 58px;
+    height: 50px;
     border-radius: 14px;
     border-width: 1px;
     border-color: selected ? accent : (touch.has-hover ? #54617a : #344056);
@@ -55,7 +84,7 @@ component AutoLanguageChoice inherits Rectangle {
     Txt {
         text: I18n.language-name(-1);
         color: selected ? #ffe0a3 : #c7d1df;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 800;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -100,111 +129,116 @@ export component SettingsPage inherits Rectangle {
             vertical-stretch: 1;
             radius: 26px;
 
-            VerticalLayout {
-                padding: 24px;
-                spacing: 16px;
+            ScrollView {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: self.width;
+                viewport-height: form.height;
 
-                TitleBlock {
-                    title: I18n.tr("设置", "Settings", "設定");
-                    sub: I18n.tr("工具运行记录与当前状态", "Logs, language, and current status", "ログ、言語、現在の状態");
-                }
-
-                Action {
-                    label: update_checking
-                        ? I18n.tr("检查中", "Checking", "確認中")
-                        : I18n.tr("检查更新", "Check Updates", "更新を確認");
-                    sub: update_status_text;
-                    enabled: !busy && !update_checking;
-                    accent: #62e2c1;
-                    clicked => { root.check_updates_clicked(); }
-                }
-
-                Action {
-                    label: I18n.tr("打开日志目录", "Open Log Folder", "ログフォルダーを開く");
-                    sub: I18n.tr("查看工具运行记录", "View toolbox runtime logs", "ツールの実行ログを表示");
-                    enabled: !busy;
-                    accent: #a8d8ff;
-                    clicked => { root.open_logs_clicked(); }
-                }
-
-                TitleBlock {
-                    title: I18n.tr("下载代理", "Download Proxy", "ダウンロードプロキシ");
-                    sub: github_proxy_status_text;
-                }
-
-                VerticalLayout {
-                    height: 118px;
-                    spacing: 10px;
-
-                    Action {
-                        label: I18n.tr("选择代理节点", "Select Proxy Node", "プロキシノードを選択");
-                        sub: github_proxy_text == "" ? I18n.tr("直连 GitHub", "Direct GitHub", "GitHub へ直接接続") : github_proxy_text;
-                        enabled: !busy && !github_proxy_loading;
-                        accent: #62e2c1;
-                        clicked => { root.open_github_proxy_dialog_clicked(); }
-                    }
-
-                    Action {
-                        label: github_proxy_loading ? I18n.tr("刷新并测速中", "Refreshing and Testing", "更新と測定中") : I18n.tr("刷新代理列表", "Refresh Proxy List", "プロキシ一覧を更新");
-                        sub: I18n.tr("重新获取节点并测试延迟", "Fetch nodes and test latency", "ノードを取得して遅延を測定");
-                        enabled: !busy && !github_proxy_loading;
-                        accent: #a8d8ff;
-                        clicked => { root.refresh_github_proxies_clicked(); }
-                    }
-                }
-
-                TextField {
-                    text <=> root.github_proxy_text;
-                    placeholder: "https://git-proxy.cubland.icu/";
-                    enabled: !busy;
-                    edited(text) => { root.github_proxy_changed(text); }
-                }
-
-                Rectangle {
-                    vertical-stretch: 1;
+                form := Rectangle {
+                    width: parent.width - 14px;
+                    height: 610px;
                     background: #00000000;
-                }
 
-                TitleBlock {
-                    title: I18n.tr("语言", "Language", "言語");
-                    sub: I18n.tr("跟随系统或手动选择", "Follow system or choose manually", "システムに追従または手動選択");
-                }
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        padding: 24px;
+                        spacing: 12px;
 
-                HorizontalLayout {
-                    height: 58px;
-                    spacing: 12px;
+                        TitleBlock {
+                            title: I18n.tr("设置", "Settings", "設定");
+                            sub: I18n.tr("更新、代理、语言与日志", "Updates, proxy, language, and logs", "更新、プロキシ、言語、ログ");
+                        }
 
-                    AutoLanguageChoice {
-                        horizontal-stretch: 1;
-                        language-mode: root.language_mode;
-                        clicked => { root.language_changed(-1); }
-                    }
+                        Action {
+                            label: update_checking
+                                ? I18n.tr("检查中", "Checking", "確認中")
+                                : I18n.tr("检查更新", "Check Updates", "更新を確認");
+                            sub: update_status_text;
+                            enabled: !busy && !update_checking;
+                            accent: #62e2c1;
+                            clicked => { root.check_updates_clicked(); }
+                        }
 
-                    LanguageChoice {
-                        horizontal-stretch: 1;
-                        code: 0;
-                        language-mode: root.language_mode;
-                        flag: @image-url("../assets/flag-cn.svg");
-                        accent: #d7c4ff;
-                        clicked => { root.language_changed(0); }
-                    }
+                        Action {
+                            label: I18n.tr("打开日志目录", "Open Log Folder", "ログフォルダーを開く");
+                            sub: I18n.tr("查看工具运行记录", "View toolbox runtime logs", "ツールの実行ログを表示");
+                            enabled: !busy;
+                            accent: #a8d8ff;
+                            clicked => { root.open_logs_clicked(); }
+                        }
 
-                    LanguageChoice {
-                        horizontal-stretch: 1;
-                        code: 1;
-                        language-mode: root.language_mode;
-                        flag: @image-url("../assets/flag-us.svg");
-                        accent: #a8d8ff;
-                        clicked => { root.language_changed(1); }
-                    }
+                        SettingsSection {
+                            title: I18n.tr("下载代理", "Download Proxy", "ダウンロードプロキシ");
+                            sub: github_proxy_status_text;
+                        }
 
-                    LanguageChoice {
-                        horizontal-stretch: 1;
-                        code: 2;
-                        language-mode: root.language_mode;
-                        flag: @image-url("../assets/flag-jp.svg");
-                        accent: #9ef0b5;
-                        clicked => { root.language_changed(2); }
+                        Action {
+                            label: I18n.tr("选择代理节点", "Select Proxy Node", "プロキシノードを選択");
+                            sub: github_proxy_text == "" ? I18n.tr("直连 GitHub", "Direct GitHub", "GitHub へ直接接続") : github_proxy_text;
+                            enabled: !busy && !github_proxy_loading;
+                            accent: #62e2c1;
+                            clicked => { root.open_github_proxy_dialog_clicked(); }
+                        }
+
+                        TextField {
+                            text <=> root.github_proxy_text;
+                            placeholder: "https://git-proxy.cubland.icu/";
+                            enabled: !busy;
+                            edited(text) => { root.github_proxy_changed(text); }
+                        }
+
+                        Action {
+                            label: github_proxy_loading ? I18n.tr("刷新并测速中", "Refreshing and Testing", "更新と測定中") : I18n.tr("刷新代理列表", "Refresh Proxy List", "プロキシ一覧を更新");
+                            sub: I18n.tr("重新获取节点并测试延迟", "Fetch nodes and test latency", "ノードを取得して遅延を測定");
+                            enabled: !busy && !github_proxy_loading;
+                            accent: #a8d8ff;
+                            clicked => { root.refresh_github_proxies_clicked(); }
+                        }
+
+                        SettingsSection {
+                            title: I18n.tr("语言", "Language", "言語");
+                            sub: I18n.tr("跟随系统或手动选择", "Follow system or choose manually", "システムに追従または手動選択");
+                        }
+
+                        HorizontalLayout {
+                            height: 50px;
+                            spacing: 10px;
+
+                            AutoLanguageChoice {
+                                horizontal-stretch: 1;
+                                language-mode: root.language_mode;
+                                clicked => { root.language_changed(-1); }
+                            }
+
+                            LanguageChoice {
+                                horizontal-stretch: 1;
+                                code: 0;
+                                language-mode: root.language_mode;
+                                flag: @image-url("../assets/flag-cn.svg");
+                                accent: #d7c4ff;
+                                clicked => { root.language_changed(0); }
+                            }
+
+                            LanguageChoice {
+                                horizontal-stretch: 1;
+                                code: 1;
+                                language-mode: root.language_mode;
+                                flag: @image-url("../assets/flag-us.svg");
+                                accent: #a8d8ff;
+                                clicked => { root.language_changed(1); }
+                            }
+
+                            LanguageChoice {
+                                horizontal-stretch: 1;
+                                code: 2;
+                                language-mode: root.language_mode;
+                                flag: @image-url("../assets/flag-jp.svg");
+                                accent: #9ef0b5;
+                                clicked => { root.language_changed(2); }
+                            }
+                        }
                     }
                 }
             }
