@@ -230,12 +230,15 @@ export component AppWindow inherits Window {
             }
 
             content := Rectangle {
+                property <length> bottom-safe-area: 34px;
+                property <length> page-height: max(0px, parent.height - bottom-safe-area);
+
                 vertical-stretch: 1;
                 background: #00000000;
 
                 StartPage {
                     width: parent.width;
-                    height: parent.height;
+                    height: content.page-height;
                     visible: root.page == 0;
                     has_target: root.has_target;
                     busy: root.busy;
@@ -254,7 +257,7 @@ export component AppWindow inherits Window {
 
                 DirectoryPage {
                     width: parent.width;
-                    height: parent.height;
+                    height: content.page-height;
                     visible: root.page == 1;
                     has_target: root.has_target;
                     busy: root.busy;
@@ -272,7 +275,7 @@ export component AppWindow inherits Window {
 
                 DiagnosticsPage {
                     width: parent.width;
-                    height: parent.height;
+                    height: content.page-height;
                     visible: root.page == 2;
                     has_target: root.has_target;
                     busy: root.busy;
@@ -290,7 +293,7 @@ export component AppWindow inherits Window {
 
                 VntPage {
                     width: parent.width;
-                    height: parent.height;
+                    height: content.page-height;
                     visible: root.page == 5;
                     vnt_server_text <=> root.vnt_server_text;
                     vnt_new_server_text <=> root.vnt_new_server_text;
@@ -319,7 +322,7 @@ export component AppWindow inherits Window {
 
                 SettingsPage {
                     width: parent.width;
-                    height: parent.height;
+                    height: content.page-height;
                     visible: root.page == 3;
                     busy: root.busy;
                     has_target: root.has_target;
@@ -344,7 +347,7 @@ export component AppWindow inherits Window {
 
                 ServersPage {
                     width: parent.width;
-                    height: parent.height;
+                    height: content.page-height;
                     visible: root.page == 4;
                     servers_loading: root.servers_loading;
                     server_status_text: root.server_status_text;
@@ -354,7 +357,7 @@ export component AppWindow inherits Window {
 
                 if root.page == 0 : MamaButton {
                     x: parent.width - self.width - 22px;
-                    y: parent.height - self.height - 34px;
+                    y: content.page-height - self.height - 22px;
                     clicked => { root.show_mama_image = true; }
                 }
             }
