@@ -3,13 +3,13 @@ import { I18n } from "../i18n.slint";
 
 component LanguageChoice inherits Rectangle {
     in property <int> code;
-    in property <int> language;
+    in property <int> language-mode;
     in property <image> flag;
     in property <brush> accent: #62e2c1;
     callback clicked();
 
-    property <bool> selected: language == code;
-    property <bool> enabled-state: language != code;
+    property <bool> selected: language-mode == code;
+    property <bool> enabled-state: language-mode != code;
 
     height: 58px;
     border-radius: 14px;
@@ -35,6 +35,39 @@ component LanguageChoice inherits Rectangle {
     }
 }
 
+component AutoLanguageChoice inherits Rectangle {
+    in property <int> language-mode;
+    in property <brush> accent: #f6c76d;
+    callback clicked();
+
+    property <bool> selected: language-mode == -1;
+    property <bool> enabled-state: language-mode != -1;
+
+    height: 58px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: selected ? accent : (touch.has-hover ? #54617a : #344056);
+    background: selected ? #241b10 : (touch.has-hover ? #1d2531 : #0f131a);
+
+    animate background { duration: 140ms; }
+    animate border-color { duration: 140ms; }
+
+    Txt {
+        text: I18n.language-name(-1);
+        color: selected ? #ffe0a3 : #c7d1df;
+        font-size: 14px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        wrap: no-wrap;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled-state;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component SettingsPage inherits Rectangle {
     in property <bool> busy;
     in property <bool> has_target;
@@ -48,6 +81,7 @@ export component SettingsPage inherits Rectangle {
     in property <bool> github_proxy_loading;
     in property <string> github_proxy_status_text;
     in property <int> language;
+    in property <int> language_mode;
     callback open_logs_clicked();
     callback check_updates_clicked();
     callback github_proxy_changed(proxy: string);
@@ -133,17 +167,23 @@ export component SettingsPage inherits Rectangle {
 
                 TitleBlock {
                     title: I18n.tr("语言", "Language", "言語");
-                    sub: I18n.tr("选择界面显示语言", "Choose the interface language", "表示言語を選択");
+                    sub: I18n.tr("跟随系统或手动选择", "Follow system or choose manually", "システムに追従または手動選択");
                 }
 
                 HorizontalLayout {
                     height: 58px;
                     spacing: 12px;
 
+                    AutoLanguageChoice {
+                        horizontal-stretch: 1;
+                        language-mode: root.language_mode;
+                        clicked => { root.language_changed(-1); }
+                    }
+
                     LanguageChoice {
                         horizontal-stretch: 1;
                         code: 0;
-                        language: root.language;
+                        language-mode: root.language_mode;
                         flag: @image-url("../assets/flag-cn.svg");
                         accent: #d7c4ff;
                         clicked => { root.language_changed(0); }
@@ -152,7 +192,7 @@ export component SettingsPage inherits Rectangle {
                     LanguageChoice {
                         horizontal-stretch: 1;
                         code: 1;
-                        language: root.language;
+                        language-mode: root.language_mode;
                         flag: @image-url("../assets/flag-us.svg");
                         accent: #a8d8ff;
                         clicked => { root.language_changed(1); }
@@ -161,7 +201,7 @@ export component SettingsPage inherits Rectangle {
                     LanguageChoice {
                         horizontal-stretch: 1;
                         code: 2;
-                        language: root.language;
+                        language-mode: root.language_mode;
                         flag: @image-url("../assets/flag-jp.svg");
                         accent: #9ef0b5;
                         clicked => { root.language_changed(2); }

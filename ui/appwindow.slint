@@ -89,6 +89,7 @@ export component AppWindow inherits Window {
     in-out property <string> vnt_peer_summary_text: I18n.tr("0 个节点", "0 peers", "0 ノード");
     in-out property <[VntServerRow]> vnt_server_rows;
     in-out property <int> language: 0;
+    in-out property <int> language_mode: -1;
 
     // 列表模型由 Rust 持有并原地更新。
     in-out property <[PortRow]> port_rows;
@@ -331,6 +332,7 @@ export component AppWindow inherits Window {
                     github_proxy_loading: root.github_proxy_loading;
                     github_proxy_status_text: root.github_proxy_status_text;
                     language: root.language;
+                    language_mode: root.language_mode;
                     open_logs_clicked => { root.open_logs_clicked(); }
                     check_updates_clicked => { root.check_updates_clicked(); }
                     github_proxy_changed(proxy) => { root.github_proxy_changed(proxy); }

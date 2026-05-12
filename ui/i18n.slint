@@ -1,5 +1,5 @@
 export global I18n {
-    // 0 = 简体中文，1 = English，2 = 日本語。
+    // root language 始终是解析后的有效语言：0 = 简体中文，1 = English，2 = 日本語。
     in-out property <int> language: 0;
 
     public pure function tr(zh: string, en: string, ja: string) -> string {
@@ -7,6 +7,6 @@ export global I18n {
     }
 
     public pure function language-name(code: int) -> string {
-        return code == 1 ? "English" : (code == 2 ? "日本語" : "简体中文");
+        return code == -1 ? tr("自动", "Auto", "自動") : (code == 1 ? "English" : (code == 2 ? "日本語" : "简体中文"));
     }
 }

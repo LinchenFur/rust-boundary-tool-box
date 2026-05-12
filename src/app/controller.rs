@@ -74,14 +74,16 @@ impl AppController {
                 AppPrefs::default()
             }
         };
-        app_prefs.language = i18n::normalize_language(app_prefs.language);
+        app_prefs.language = i18n::normalize_language_preference(app_prefs.language);
         app_prefs.github_proxy_prefix =
             core::normalize_github_proxy_prefix(&app_prefs.github_proxy_prefix);
         core.set_github_proxy_prefix(&app_prefs.github_proxy_prefix);
-        let language = app_prefs.language;
+        let language_mode = app_prefs.language;
+        let language = i18n::resolve_language(language_mode);
         let github_proxy_prefix = app_prefs.github_proxy_prefix.clone();
         let vnt_prefs = app_prefs.vnt.clone();
         ui.set_language(language);
+        ui.set_language_mode(language_mode);
 
         // 对 Slint 模型只创建一次，后续原地更新，避免破坏已有 ListView 绑定。
         let port_model = Rc::new(VecModel::from(

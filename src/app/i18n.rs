@@ -1,15 +1,76 @@
 //! Minimal application-side i18n helpers for Rust-owned UI strings.
 
 use super::*;
+#[cfg(not(windows))]
+use std::env;
+#[cfg(windows)]
+use windows::Win32::Globalization::GetUserDefaultUILanguage;
 
+pub(crate) const LANGUAGE_AUTO: i32 = -1;
 pub(crate) const LANGUAGE_ZH: i32 = 0;
 pub(crate) const LANGUAGE_EN: i32 = 1;
 pub(crate) const LANGUAGE_JA: i32 = 2;
+
+pub(crate) fn normalize_language_preference(language: i32) -> i32 {
+    match language {
+        LANGUAGE_AUTO | LANGUAGE_ZH | LANGUAGE_EN | LANGUAGE_JA => language,
+        _ => LANGUAGE_AUTO,
+    }
+}
 
 pub(crate) fn normalize_language(language: i32) -> i32 {
     match language {
         LANGUAGE_EN | LANGUAGE_JA => language,
         _ => LANGUAGE_ZH,
+    }
+}
+
+pub(crate) fn resolve_language(preference: i32) -> i32 {
+    match normalize_language_preference(preference) {
+        LANGUAGE_AUTO => detect_system_language(),
+        language => normalize_language(language),
+    }
+}
+
+pub(crate) fn detect_system_language() -> i32 {
+    detect_system_language_impl()
+}
+
+#[cfg(windows)]
+fn detect_system_language_impl() -> i32 {
+    // LANGID 的低 10 位是 primary language id，可直接区分中/英/日。
+    let lang_id = unsafe { GetUserDefaultUILanguage() };
+    language_from_windows_lang_id(lang_id)
+}
+
+#[cfg(not(windows))]
+fn detect_system_language_impl() -> i32 {
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .find_map(|key| env::var(key).ok())
+        .as_deref()
+        .map(language_from_locale_text)
+        .unwrap_or(LANGUAGE_EN)
+}
+
+fn language_from_windows_lang_id(lang_id: u16) -> i32 {
+    match lang_id & 0x03ff {
+        0x04 => LANGUAGE_ZH,
+        0x11 => LANGUAGE_JA,
+        0x09 => LANGUAGE_EN,
+        _ => LANGUAGE_EN,
+    }
+}
+
+#[cfg_attr(windows, allow(dead_code))]
+fn language_from_locale_text(locale: &str) -> i32 {
+    let lower = locale.to_ascii_lowercase();
+    if lower.starts_with("zh") {
+        LANGUAGE_ZH
+    } else if lower.starts_with("ja") {
+        LANGUAGE_JA
+    } else {
+        LANGUAGE_EN
     }
 }
 
@@ -28,7 +89,7 @@ pub(crate) fn tr(
 
 impl AppController {
     pub(super) fn language(&self) -> i32 {
-        normalize_language(self.app_prefs.language)
+        resolve_language(self.app_prefs.language)
     }
 
     pub(super) fn tr(&self, zh: &'static str, en: &'static str, ja: &'static str) -> &'static str {
@@ -36,8 +97,8 @@ impl AppController {
     }
 
     pub(super) fn set_language(&mut self, language: i32) {
-        let language = normalize_language(language);
-        self.app_prefs.language = language;
+        self.app_prefs.language = normalize_language_preference(language);
+        let language = self.language();
         self.sync_slint_language(language);
         self.apply_language_defaults();
         self.save_app_prefs();
@@ -45,6 +106,7 @@ impl AppController {
 
     pub(super) fn sync_slint_language(&self, language: i32) {
         self.ui.set_language(language);
+        self.ui.set_language_mode(self.app_prefs.language);
     }
 
     pub(super) fn localize_action_title(&self, title: &str) -> String {
@@ -134,5 +196,33 @@ impl AppController {
         }
 
         self.sync_github_proxy_current_selection();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_auto_from_windows_lang_id() {
+        assert_eq!(language_from_windows_lang_id(0x0804), LANGUAGE_ZH);
+        assert_eq!(language_from_windows_lang_id(0x0411), LANGUAGE_JA);
+        assert_eq!(language_from_windows_lang_id(0x0409), LANGUAGE_EN);
+        assert_eq!(language_from_windows_lang_id(0x0419), LANGUAGE_EN);
+    }
+
+    #[test]
+    fn resolves_locale_text() {
+        assert_eq!(language_from_locale_text("zh_CN.UTF-8"), LANGUAGE_ZH);
+        assert_eq!(language_from_locale_text("ja-JP"), LANGUAGE_JA);
+        assert_eq!(language_from_locale_text("en_US.UTF-8"), LANGUAGE_EN);
+        assert_eq!(language_from_locale_text("ru_RU.UTF-8"), LANGUAGE_EN);
+    }
+
+    #[test]
+    fn keeps_auto_as_preference_only() {
+        assert_eq!(normalize_language_preference(LANGUAGE_AUTO), LANGUAGE_AUTO);
+        assert_eq!(normalize_language_preference(99), LANGUAGE_AUTO);
+        assert_eq!(normalize_language(LANGUAGE_AUTO), LANGUAGE_ZH);
     }
 }
