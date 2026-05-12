@@ -1,8 +1,11 @@
-//! GitHub Release 更新检查。
+//! GitHub Release 更新检查和下载。
 
+use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::Deserialize;
 
@@ -80,6 +83,96 @@ pub(crate) fn check_latest_release() -> Result<UpdateCheckResult> {
         published_at: release.published_at.unwrap_or_else(|| "-".to_string()),
         is_newer: is_version_newer(&latest_version, APP_VERSION),
     })
+}
+
+/// 下载最新 release 资产到运行目录；运行目录不可写时落到 installer_tool/downloads。
+pub(crate) fn download_release_asset(
+    result: &UpdateCheckResult,
+    runtime_dir: &Path,
+    fallback_dir: &Path,
+    proxy_prefix: &str,
+) -> Result<PathBuf> {
+    let Some(asset_url) = result.asset_url.as_deref() else {
+        bail!("该 Release 未提供 boundary_toolbox.exe 资产");
+    };
+    let file_name = release_asset_file_name(&result.latest_tag);
+    let download_url = crate::core::proxied_github_url(proxy_prefix, asset_url);
+    match download_asset_to_dir(&download_url, runtime_dir, &file_name) {
+        Ok(path) => Ok(path),
+        Err(primary_error) => download_asset_to_dir(&download_url, fallback_dir, &file_name)
+            .with_context(|| format!("下载到运行目录失败：{primary_error}")),
+    }
+}
+
+fn release_asset_file_name(tag: &str) -> String {
+    let version = format_version_for_display(tag);
+    let version = version
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("boundary_toolbox-{version}.exe")
+}
+
+fn download_asset_to_dir(url: &str, dir: &Path, file_name: &str) -> Result<PathBuf> {
+    fs::create_dir_all(dir).with_context(|| format!("创建下载目录失败：{}", dir.display()))?;
+    let target = dir.join(file_name);
+    let temp = dir.join(format!(".{file_name}.download"));
+    if temp.exists() {
+        fs::remove_file(&temp)
+            .with_context(|| format!("删除旧临时文件失败：{}", temp.display()))?;
+    }
+
+    let mut response = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(180))
+        .build()
+        .context("创建更新下载 HTTP 客户端失败")?
+        .get(url)
+        .header("User-Agent", format!("boundary-toolbox/{APP_VERSION}"))
+        .send()
+        .context("请求更新文件失败")?
+        .error_for_status()
+        .context("更新文件下载接口返回错误")?;
+
+    {
+        let mut output = File::create(&temp)
+            .with_context(|| format!("创建临时下载文件失败：{}", temp.display()))?;
+        std::io::copy(&mut response, &mut output).context("写入更新文件失败")?;
+        output
+            .flush()
+            .with_context(|| format!("刷新临时下载文件失败：{}", temp.display()))?;
+    }
+
+    validate_downloaded_exe(&temp)?;
+    if target.exists() {
+        fs::remove_file(&target)
+            .with_context(|| format!("替换旧更新文件失败：{}", target.display()))?;
+    }
+    fs::rename(&temp, &target).with_context(|| {
+        format!(
+            "保存更新文件失败：{} -> {}",
+            temp.display(),
+            target.display()
+        )
+    })?;
+    Ok(target)
+}
+
+fn validate_downloaded_exe(path: &Path) -> Result<()> {
+    let mut file =
+        File::open(path).with_context(|| format!("读取更新文件失败：{}", path.display()))?;
+    let mut magic = [0u8; 2];
+    file.read_exact(&mut magic)
+        .with_context(|| format!("更新文件为空或不完整：{}", path.display()))?;
+    if magic != *b"MZ" {
+        bail!("下载结果不是有效的 Windows 可执行文件");
+    }
+    Ok(())
 }
 
 /// 设置页紧凑状态文本。
@@ -249,5 +342,17 @@ mod tests {
 
         let release = select_latest_visible_release(releases).expect("visible release");
         assert_eq!(release.tag_name, "beta19.19.85");
+    }
+
+    #[test]
+    fn creates_versioned_asset_file_name() {
+        assert_eq!(
+            release_asset_file_name("v19.19.91"),
+            "boundary_toolbox-19.19.91.exe"
+        );
+        assert_eq!(
+            release_asset_file_name("release v19/19/91"),
+            "boundary_toolbox-release_v19_19_91.exe"
+        );
     }
 }

@@ -106,7 +106,17 @@ impl AppController {
                     } else {
                         self.tr("检查更新", "Check Updates", "更新を確認")
                     };
-                    self.show_info_dialog(title, &update_dialog_text(&result, self.language()));
+                    if result.is_newer && result.asset_url.is_some() {
+                        self.show_confirm_dialog(
+                            title,
+                            &update_dialog_text(&result, self.language()),
+                            self.tr("下载更新", "Download Update", "更新をダウンロード"),
+                            self.tr("稍后", "Later", "後で"),
+                            PendingDialogAction::DownloadUpdate { result },
+                        );
+                    } else {
+                        self.show_info_dialog(title, &update_dialog_text(&result, self.language()));
+                    }
                 }
                 AppMessage::UpdateCheckFailed { error, automatic } => {
                     self.ui.set_update_checking(false);
@@ -128,6 +138,63 @@ impl AppController {
                         self.tr("检查更新", "Check Updates", "更新を確認")
                     };
                     self.show_error_dialog(title, &error);
+                }
+                AppMessage::UpdateDownloadFinished { tag, path } => {
+                    self.ui.set_update_checking(false);
+                    self.ui.set_update_status_text(
+                        format!(
+                            "{}{}",
+                            self.tr(
+                                "更新：已下载 ",
+                                "Update downloaded: ",
+                                "更新をダウンロード済み: ",
+                            ),
+                            tag
+                        )
+                        .into(),
+                    );
+                    self.append_log(&format!(
+                        "[{}] 更新已下载：{} -> {}",
+                        core::now_text(),
+                        tag,
+                        path.display()
+                    ));
+                    self.show_info_dialog(
+                        self.tr("下载完成", "Download Complete", "ダウンロード完了"),
+                        &format!(
+                            "{}\n{}\n\n{}",
+                            self.tr(
+                                "更新文件已下载。",
+                                "The update file has been downloaded.",
+                                "更新ファイルをダウンロードしました。",
+                            ),
+                            path.display(),
+                            self.tr(
+                                "关闭当前程序后运行新文件即可更新。",
+                                "Close this toolbox and run the new file to update.",
+                                "現在のツールを閉じて新しいファイルを実行すると更新できます。",
+                            )
+                        ),
+                    );
+                }
+                AppMessage::UpdateDownloadFailed(error) => {
+                    self.ui.set_update_checking(false);
+                    self.ui.set_update_status_text(
+                        format!(
+                            "{}{error}",
+                            self.tr(
+                                "更新：下载失败：",
+                                "Update download failed: ",
+                                "更新ダウンロード失敗: ",
+                            )
+                        )
+                        .into(),
+                    );
+                    self.append_log(&format!("[{}] 更新下载失败：{}", core::now_text(), error));
+                    self.show_error_dialog(
+                        self.tr("下载更新", "Download Update", "更新をダウンロード"),
+                        &error,
+                    );
                 }
                 AppMessage::GithubProxyRows {
                     rows,

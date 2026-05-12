@@ -53,7 +53,10 @@ use dialogs::estimate_dialog_text_lines;
 use prefs::{AppPrefs, VntPrefs};
 use proxy_list::{GithubProxyOption, initial_github_proxy_rows, proxy_options_to_rows};
 use server_list::{RemoteServer, fetch_servers, server_placeholder_row, server_to_row};
-use update::{UpdateCheckResult, check_latest_release, update_dialog_text, update_status_text};
+use update::{
+    UpdateCheckResult, check_latest_release, download_release_asset, update_dialog_text,
+    update_status_text,
+};
 use vnt_rows::{
     apply_vnt_idle_to_ui, localized_vnt_idle_snapshot, vnt_peer_to_row, vnt_placeholder_rows,
     vnt_server_placeholder_rows, vnt_server_to_row,
@@ -96,6 +99,11 @@ enum AppMessage {
         error: String,
         automatic: bool,
     },
+    UpdateDownloadFinished {
+        tag: String,
+        path: PathBuf,
+    },
+    UpdateDownloadFailed(String),
     VntEvent(VntEvent),
     InstallProgress(InstallProgress),
     ActionFinished {
@@ -125,6 +133,9 @@ enum PendingDialogAction {
         conflicts: Vec<PortConflict>,
     },
     ManualPathInput,
+    DownloadUpdate {
+        result: UpdateCheckResult,
+    },
 }
 
 /// 供 Slint 回调共享的可变应用状态。

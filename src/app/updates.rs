@@ -27,4 +27,37 @@ impl AppController {
             }
         });
     }
+
+    /// 后台下载已经检查到的新版本 exe。
+    pub(super) fn start_update_download(&mut self, result: UpdateCheckResult) {
+        if self.ui.get_update_checking() {
+            return;
+        }
+
+        self.hide_app_dialog();
+        self.ui.set_update_checking(true);
+        self.ui.set_update_status_text(
+            self.tr(
+                "更新：下载中...",
+                "Update: downloading...",
+                "更新: ダウンロード中...",
+            )
+            .into(),
+        );
+        let tx = self.tx.clone();
+        let runtime_dir = self.core.runtime_dir.clone();
+        let fallback_dir = self.core.installer_home.join("downloads");
+        let proxy_prefix = self.core.github_proxy_prefix();
+        thread::spawn(move || {
+            let tag = result.latest_tag.clone();
+            match download_release_asset(&result, &runtime_dir, &fallback_dir, &proxy_prefix) {
+                Ok(path) => {
+                    let _ = tx.send(AppMessage::UpdateDownloadFinished { tag, path });
+                }
+                Err(error) => {
+                    let _ = tx.send(AppMessage::UpdateDownloadFailed(error.to_string()));
+                }
+            }
+        });
+    }
 }

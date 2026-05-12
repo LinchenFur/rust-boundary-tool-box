@@ -97,6 +97,7 @@ impl AppController {
         match action {
             PendingDialogAction::None => self.hide_app_dialog(),
             PendingDialogAction::ManualPathInput => self.confirm_manual_path_from_dialog(),
+            PendingDialogAction::DownloadUpdate { result } => self.start_update_download(result),
             PendingDialogAction::LaunchWithConflicts {
                 target,
                 mode,
