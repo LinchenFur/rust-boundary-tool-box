@@ -35,7 +35,25 @@ impl AppController {
         }
 
         self.hide_app_dialog();
+        self.ui.set_busy(true);
         self.ui.set_update_checking(true);
+        self.ui.set_install_progress_cancelable(false);
+        self.ui.set_install_progress_dialog_title(
+            self.tr("下载更新", "Download Update", "更新をダウンロード")
+                .into(),
+        );
+        self.ui.set_install_progress_visible(true);
+        self.ui.set_install_progress_value(0.0);
+        self.ui.set_install_progress_percent("0%".into());
+        self.ui.set_install_progress_title(
+            self.tr("准备下载更新", "Preparing update", "更新準備中")
+                .into(),
+        );
+        self.set_install_progress_detail_text(self.tr(
+            "正在准备从 GitHub Release 下载更新。",
+            "Preparing to download the update from GitHub Release.",
+            "GitHub Release から更新をダウンロードする準備をしています。",
+        ));
         self.ui.set_update_status_text(
             self.tr(
                 "更新：下载中...",
@@ -48,9 +66,19 @@ impl AppController {
         let runtime_dir = self.core.runtime_dir.clone();
         let fallback_dir = self.core.installer_home.join("downloads");
         let proxy_prefix = self.core.github_proxy_prefix();
+        let progress_tx = tx.clone();
+        let progress = Arc::new(move |progress: InstallProgress| {
+            let _ = progress_tx.send(AppMessage::InstallProgress(progress));
+        });
         thread::spawn(move || {
             let tag = result.latest_tag.clone();
-            match download_release_asset(&result, &runtime_dir, &fallback_dir, &proxy_prefix) {
+            match download_release_asset(
+                &result,
+                &runtime_dir,
+                &fallback_dir,
+                &proxy_prefix,
+                progress,
+            ) {
                 Ok(path) => {
                     let _ = tx.send(AppMessage::UpdateDownloadFinished { tag, path });
                 }

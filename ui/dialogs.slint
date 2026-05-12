@@ -310,6 +310,7 @@ export component AppDialog inherits Rectangle {
 export component InstallProgressDialog inherits Rectangle {
     in property <bool> busy;
     in property <bool> cancelable: true;
+    in property <string> dialog_title: I18n.tr("任务进度", "Task Progress", "タスク進捗");
     in property <float> progress: 0.0;
     in property <string> percent: "0%";
     in property <string> title: "";
@@ -340,7 +341,7 @@ export component InstallProgressDialog inherits Rectangle {
                 spacing: 14px;
 
                 TitleBlock {
-                    title: I18n.tr("安装进度", "Install Progress", "インストール進捗");
+                    title: root.dialog_title;
                     sub: "";
                 }
 

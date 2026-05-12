@@ -24,6 +24,9 @@ impl AppController {
         );
         self.ui.set_busy(true);
         self.ui.set_install_progress_cancelable(false);
+        self.ui.set_install_progress_dialog_title(
+            self.tr("界面字体", "UI Font", "UI フォント").into(),
+        );
         self.ui.set_install_progress_visible(true);
         self.ui.set_install_progress_value(0.0);
         self.ui.set_install_progress_percent("0%".into());

@@ -183,6 +183,9 @@ impl AppController {
         ui.set_pulse(false);
         ui.set_install_progress_visible(false);
         ui.set_install_progress_cancelable(true);
+        ui.set_install_progress_dialog_title(
+            i18n::tr(language, "任务进度", "Task Progress", "タスク進捗").into(),
+        );
         ui.set_install_progress_value(0.0);
         ui.set_install_progress_percent("0%".into());
         ui.set_install_progress_title("".into());

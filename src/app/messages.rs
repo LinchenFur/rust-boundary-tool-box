@@ -140,6 +140,7 @@ impl AppController {
                     self.show_error_dialog(title, &error);
                 }
                 AppMessage::UpdateDownloadFinished { tag, path } => {
+                    self.ui.set_busy(false);
                     self.ui.set_update_checking(false);
                     self.ui.set_update_status_text(
                         format!(
@@ -159,25 +160,36 @@ impl AppController {
                         tag,
                         path.display()
                     ));
-                    self.show_info_dialog(
-                        self.tr("下载完成", "Download Complete", "ダウンロード完了"),
-                        &format!(
-                            "{}\n{}\n\n{}",
-                            self.tr(
-                                "更新文件已下载。",
-                                "The update file has been downloaded.",
-                                "更新ファイルをダウンロードしました。",
-                            ),
-                            path.display(),
-                            self.tr(
-                                "关闭当前程序后运行新文件即可更新。",
-                                "Close this toolbox and run the new file to update.",
-                                "現在のツールを閉じて新しいファイルを実行すると更新できます。",
-                            )
-                        ),
+                    self.ui.set_install_progress_visible(true);
+                    self.ui.set_install_progress_cancelable(false);
+                    self.ui.set_install_progress_dialog_title(
+                        self.tr("下载更新", "Download Update", "更新をダウンロード")
+                            .into(),
                     );
+                    self.ui.set_install_progress_value(1.0);
+                    self.ui.set_install_progress_percent("100%".into());
+                    self.ui.set_install_progress_title(
+                        self.tr("下载完成", "Download Complete", "ダウンロード完了")
+                            .into(),
+                    );
+                    self.set_install_progress_detail_text(&format!(
+                        "{}\n{}\n\n{}",
+                        self.tr(
+                            "更新文件已下载。",
+                            "The update file has been downloaded.",
+                            "更新ファイルをダウンロードしました。",
+                        ),
+                        path.display(),
+                        self.tr(
+                            "关闭当前程序后运行新文件即可更新。",
+                            "Close this toolbox and run the new file to update.",
+                            "現在のツールを閉じて新しいファイルを実行すると更新できます。",
+                        )
+                    ));
+                    self.hide_app_dialog();
                 }
                 AppMessage::UpdateDownloadFailed(error) => {
+                    self.ui.set_busy(false);
                     self.ui.set_update_checking(false);
                     self.ui.set_update_status_text(
                         format!(
@@ -191,10 +203,18 @@ impl AppController {
                         .into(),
                     );
                     self.append_log(&format!("[{}] 更新下载失败：{}", core::now_text(), error));
-                    self.show_error_dialog(
-                        self.tr("下载更新", "Download Update", "更新をダウンロード"),
-                        &error,
+                    self.ui.set_install_progress_visible(true);
+                    self.ui.set_install_progress_cancelable(false);
+                    self.ui.set_install_progress_dialog_title(
+                        self.tr("下载更新", "Download Update", "更新をダウンロード")
+                            .into(),
                     );
+                    self.ui.set_install_progress_title(
+                        self.tr("下载失败", "Download Failed", "ダウンロード失敗")
+                            .into(),
+                    );
+                    self.set_install_progress_detail_text(&error);
+                    self.hide_app_dialog();
                 }
                 AppMessage::GithubProxyRows {
                     rows,
@@ -656,6 +676,94 @@ fn localize_install_text(text: &str, language: i32) -> String {
                     ),
                 )
         }
+        "准备下载更新" => {
+            i18n::tr(language, "准备下载更新", "Preparing update", "更新準備中").to_string()
+        }
+        "正在准备从 GitHub Release 下载更新。" => i18n::tr(
+            language,
+            "正在准备从 GitHub Release 下载更新。",
+            "Preparing to download the update from GitHub Release.",
+            "GitHub Release から更新をダウンロードする準備をしています。",
+        )
+        .to_string(),
+        "下载更新" => i18n::tr(
+            language,
+            "下载更新",
+            "Downloading update",
+            "更新をダウンロード中",
+        )
+        .to_string(),
+        "校验更新文件" => i18n::tr(
+            language,
+            "校验更新文件",
+            "Verifying update",
+            "更新ファイルを検証中",
+        )
+        .to_string(),
+        "正在校验 Windows 可执行文件。" => i18n::tr(
+            language,
+            "正在校验 Windows 可执行文件。",
+            "Verifying the Windows executable.",
+            "Windows 実行ファイルを検証しています。",
+        )
+        .to_string(),
+        "保存更新文件" => i18n::tr(
+            language,
+            "保存更新文件",
+            "Saving update",
+            "更新ファイルを保存中",
+        )
+        .to_string(),
+        "下载失败" => {
+            i18n::tr(language, "下载失败", "Download failed", "ダウンロード失敗").to_string()
+        }
+        value if value.starts_with("使用下载代理：") => {
+            let proxy = value.trim_start_matches("使用下载代理：");
+            let proxy = if proxy == "直连 GitHub" {
+                i18n::tr(language, "直连 GitHub", "Direct GitHub", "GitHub 直接接続")
+            } else {
+                proxy
+            };
+            format!(
+                "{}{}",
+                i18n::tr(
+                    language,
+                    "使用下载代理：",
+                    "Download proxy: ",
+                    "ダウンロードプロキシ: "
+                ),
+                proxy
+            )
+        }
+        value if value.starts_with("运行目录不可写，改存到下载缓存：") => format!(
+            "{}{}",
+            i18n::tr(
+                language,
+                "运行目录不可写，改存到下载缓存：",
+                "Runtime folder is not writable. Saving to cache: ",
+                "実行フォルダーに書き込めないためキャッシュに保存します: "
+            ),
+            value.trim_start_matches("运行目录不可写，改存到下载缓存：")
+        ),
+        value if value.starts_with("更新文件：已下载 ") => value.replace(
+            "更新文件：已下载 ",
+            i18n::tr(
+                language,
+                "更新文件：已下载 ",
+                "Update file: downloaded ",
+                "更新ファイル: ダウンロード済み ",
+            ),
+        ),
+        value if value.starts_with("保存更新文件：") => format!(
+            "{}{}",
+            i18n::tr(
+                language,
+                "保存更新文件：",
+                "Saving update file: ",
+                "更新ファイルを保存: "
+            ),
+            value.trim_start_matches("保存更新文件：")
+        ),
         "准备安装" => i18n::tr(
             language,
             "准备安装",

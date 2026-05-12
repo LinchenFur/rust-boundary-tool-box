@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::Deserialize;
 
-use crate::core::APP_VERSION;
+use crate::core::{APP_VERSION, InstallProgress, ProgressReporter};
 
 const RELEASES_API: &str =
     "https://api.github.com/repos/LinchenFur/rust-boundary-tool-box/releases";
@@ -91,16 +91,42 @@ pub(crate) fn download_release_asset(
     runtime_dir: &Path,
     fallback_dir: &Path,
     proxy_prefix: &str,
+    progress: ProgressReporter,
 ) -> Result<PathBuf> {
     let Some(asset_url) = result.asset_url.as_deref() else {
         bail!("该 Release 未提供 boundary_toolbox.exe 资产");
     };
     let file_name = release_asset_file_name(&result.latest_tag);
     let download_url = crate::core::proxied_github_url(proxy_prefix, asset_url);
-    match download_asset_to_dir(&download_url, runtime_dir, &file_name) {
+    let proxy_label = if proxy_prefix.trim().is_empty() {
+        "直连 GitHub".to_string()
+    } else {
+        proxy_prefix.trim().to_string()
+    };
+    report_update_progress(
+        &progress,
+        0.02,
+        "准备下载更新",
+        "正在准备从 GitHub Release 下载更新。",
+    );
+    report_update_progress(
+        &progress,
+        0.05,
+        "下载更新",
+        format!("使用下载代理：{proxy_label}"),
+    );
+    match download_asset_to_dir(&download_url, runtime_dir, &file_name, &progress) {
         Ok(path) => Ok(path),
-        Err(primary_error) => download_asset_to_dir(&download_url, fallback_dir, &file_name)
-            .with_context(|| format!("下载到运行目录失败：{primary_error}")),
+        Err(primary_error) => {
+            report_update_progress(
+                &progress,
+                0.06,
+                "下载更新",
+                format!("运行目录不可写，改存到下载缓存：{}", fallback_dir.display()),
+            );
+            download_asset_to_dir(&download_url, fallback_dir, &file_name, &progress)
+                .with_context(|| format!("下载到运行目录失败：{primary_error}"))
+        }
     }
 }
 
@@ -119,7 +145,12 @@ fn release_asset_file_name(tag: &str) -> String {
     format!("boundary_toolbox-{version}.exe")
 }
 
-fn download_asset_to_dir(url: &str, dir: &Path, file_name: &str) -> Result<PathBuf> {
+fn download_asset_to_dir(
+    url: &str,
+    dir: &Path,
+    file_name: &str,
+    progress: &ProgressReporter,
+) -> Result<PathBuf> {
     fs::create_dir_all(dir).with_context(|| format!("创建下载目录失败：{}", dir.display()))?;
     let target = dir.join(file_name);
     let temp = dir.join(format!(".{file_name}.download"));
@@ -138,17 +169,53 @@ fn download_asset_to_dir(url: &str, dir: &Path, file_name: &str) -> Result<PathB
         .context("请求更新文件失败")?
         .error_for_status()
         .context("更新文件下载接口返回错误")?;
+    let total_size = response.content_length();
 
     {
         let mut output = File::create(&temp)
             .with_context(|| format!("创建临时下载文件失败：{}", temp.display()))?;
-        std::io::copy(&mut response, &mut output).context("写入更新文件失败")?;
+        let mut buffer = [0u8; 64 * 1024];
+        let mut downloaded = 0u64;
+        let mut last_report = 0u64;
+        loop {
+            let count = response.read(&mut buffer).context("读取更新文件失败")?;
+            if count == 0 {
+                break;
+            }
+            output
+                .write_all(&buffer[..count])
+                .context("写入更新文件失败")?;
+            downloaded += count as u64;
+            if downloaded == total_size.unwrap_or_default()
+                || downloaded.saturating_sub(last_report) >= 512 * 1024
+            {
+                last_report = downloaded;
+                report_update_progress(
+                    progress,
+                    download_progress_value(downloaded, total_size),
+                    "下载更新",
+                    download_detail(downloaded, total_size),
+                );
+            }
+        }
         output
             .flush()
             .with_context(|| format!("刷新临时下载文件失败：{}", temp.display()))?;
     }
 
+    report_update_progress(
+        progress,
+        0.88,
+        "校验更新文件",
+        "正在校验 Windows 可执行文件。",
+    );
     validate_downloaded_exe(&temp)?;
+    report_update_progress(
+        progress,
+        0.94,
+        "保存更新文件",
+        format!("保存更新文件：{}", target.display()),
+    );
     if target.exists() {
         fs::remove_file(&target)
             .with_context(|| format!("替换旧更新文件失败：{}", target.display()))?;
@@ -160,7 +227,58 @@ fn download_asset_to_dir(url: &str, dir: &Path, file_name: &str) -> Result<PathB
             target.display()
         )
     })?;
+    report_update_progress(
+        progress,
+        0.98,
+        "保存更新文件",
+        format!("保存更新文件：{}", target.display()),
+    );
     Ok(target)
+}
+
+fn download_progress_value(downloaded: u64, total_size: Option<u64>) -> f32 {
+    let fraction = match total_size {
+        Some(total) if total > 0 => downloaded as f32 / total as f32,
+        _ => downloaded as f32 / (80 * 1024 * 1024) as f32,
+    };
+    (0.08 + fraction.clamp(0.0, 1.0) * 0.78).min(0.86)
+}
+
+fn download_detail(downloaded: u64, total_size: Option<u64>) -> String {
+    match total_size {
+        Some(total) if total > 0 => format!(
+            "更新文件：已下载 {} / {}",
+            format_size(downloaded),
+            format_size(total)
+        ),
+        _ => format!("更新文件：已下载 {}", format_size(downloaded)),
+    }
+}
+
+fn format_size(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    let bytes = bytes as f64;
+    if bytes >= MB {
+        format!("{:.1} MB", bytes / MB)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes / KB)
+    } else {
+        format!("{bytes:.0} B")
+    }
+}
+
+fn report_update_progress(
+    progress: &ProgressReporter,
+    value: f32,
+    title: &str,
+    detail: impl Into<String>,
+) {
+    progress(InstallProgress {
+        value,
+        title: title.to_string(),
+        detail: detail.into(),
+    });
 }
 
 fn validate_downloaded_exe(path: &Path) -> Result<()> {
