@@ -267,6 +267,7 @@ impl AppController {
                     let localized_dialog = localize_dialog_text(&dialog, self.language());
                     if title == "安装" {
                         self.ui.set_install_progress_visible(true);
+                        self.ui.set_install_progress_cancelable(true);
                         self.ui.set_install_progress_value(1.0);
                         self.ui.set_install_progress_percent("100%".into());
                         self.ui.set_install_progress_title(
@@ -282,6 +283,28 @@ impl AppController {
                             core::now_text(),
                             dialog.replace('\n', "；")
                         ));
+                    } else if title == "字体安装" {
+                        self.ui.set_install_progress_visible(true);
+                        self.ui.set_install_progress_cancelable(false);
+                        self.ui.set_install_progress_value(1.0);
+                        self.ui.set_install_progress_percent("100%".into());
+                        self.ui.set_install_progress_title(
+                            self.tr(
+                                "字体安装完成",
+                                "Font install complete",
+                                "フォントインストール完了",
+                            )
+                            .into(),
+                        );
+                        self.set_install_progress_detail_text(
+                            &localized_dialog.replace('\n', "；"),
+                        );
+                        self.append_log(&format!(
+                            "[{}] 字体安装完成：{}",
+                            core::now_text(),
+                            dialog.replace('\n', "；")
+                        ));
+                        self.start_update_check(true);
                     } else {
                         let display_title = self.localize_action_title(&title);
                         self.show_info_dialog(&display_title, &localized_dialog);
@@ -325,7 +348,21 @@ impl AppController {
                     }
                     self.sync_has_target();
                     let display_title = self.localize_action_title(&title);
-                    if cancelled {
+                    if title == "字体安装" {
+                        self.ui.set_install_progress_visible(true);
+                        self.ui.set_install_progress_cancelable(false);
+                        self.ui.set_install_progress_title(
+                            self.tr(
+                                "字体安装失败",
+                                "Font install failed",
+                                "フォントインストール失敗",
+                            )
+                            .into(),
+                        );
+                        self.set_install_progress_detail_text(&error);
+                        self.show_error_dialog(&display_title, &error);
+                        self.start_update_check(true);
+                    } else if cancelled {
                         self.append_log(&format!("[{}] 安装已取消。", core::now_text()));
                     } else {
                         self.show_error_dialog(&display_title, &error);
@@ -487,6 +524,138 @@ fn localize_install_progress(progress: &InstallProgress, language: i32) -> (Stri
 
 fn localize_install_text(text: &str, language: i32) -> String {
     match text {
+        "准备字体" => {
+            i18n::tr(language, "准备字体", "Preparing font", "フォント準備中").to_string()
+        }
+        "未检测到界面字体，准备获取最新字体包。" => i18n::tr(
+            language,
+            "未检测到界面字体，准备获取最新字体包。",
+            "UI font is missing. Preparing the latest font package.",
+            "UI フォントが見つからないため、最新のフォントパッケージを準備しています。",
+        )
+        .to_string(),
+        "查询字体版本" => i18n::tr(
+            language,
+            "查询字体版本",
+            "Checking font release",
+            "フォントリリース確認中",
+        )
+        .to_string(),
+        "正在读取 Maple Mono 最新 Release。" => i18n::tr(
+            language,
+            "正在读取 Maple Mono 最新 Release。",
+            "Reading the latest Maple Mono release.",
+            "Maple Mono の最新 Release を読み込んでいます。",
+        )
+        .to_string(),
+        "校验字体缓存" => i18n::tr(
+            language,
+            "校验字体缓存",
+            "Checking font cache",
+            "フォントキャッシュ確認中",
+        )
+        .to_string(),
+        "正在读取字体包校验信息。" => i18n::tr(
+            language,
+            "正在读取字体包校验信息。",
+            "Reading font package checksum information.",
+            "フォントパッケージのチェックサム情報を読み込んでいます。",
+        )
+        .to_string(),
+        "下载字体" => i18n::tr(
+            language,
+            "下载字体",
+            "Downloading font",
+            "フォントをダウンロード中",
+        )
+        .to_string(),
+        "校验字体包" => i18n::tr(
+            language,
+            "校验字体包",
+            "Verifying font package",
+            "フォントパッケージ検証中",
+        )
+        .to_string(),
+        "正在校验字体包 SHA256。" => i18n::tr(
+            language,
+            "正在校验字体包 SHA256。",
+            "Verifying the font package SHA256.",
+            "フォントパッケージの SHA256 を検証しています。",
+        )
+        .to_string(),
+        "安装字体" => i18n::tr(
+            language,
+            "安装字体",
+            "Installing font",
+            "フォントをインストール中",
+        )
+        .to_string(),
+        "正在解压并注册字体文件。" => i18n::tr(
+            language,
+            "正在解压并注册字体文件。",
+            "Extracting and registering font files.",
+            "フォントファイルを展開して登録しています。",
+        )
+        .to_string(),
+        "字体安装完成" => i18n::tr(
+            language,
+            "字体安装完成",
+            "Font install complete",
+            "フォントインストール完了",
+        )
+        .to_string(),
+        value if value.starts_with("开始下载 ") => format!(
+            "{}{}",
+            i18n::tr(
+                language,
+                "开始下载 ",
+                "Starting download: ",
+                "ダウンロード開始: "
+            ),
+            value.trim_start_matches("开始下载 ")
+        ),
+        value if value.starts_with("字体包：已下载 ") => value
+            .replace(
+                "字体包：已下载 ",
+                i18n::tr(
+                    language,
+                    "字体包：已下载 ",
+                    "Font package: downloaded ",
+                    "フォントパッケージ: ダウンロード済み ",
+                ),
+            )
+            .replace(" / ", i18n::tr(language, " / ", " / ", " / ")),
+        value if value.starts_with("字体包已缓存：") => format!(
+            "{}{}",
+            i18n::tr(
+                language,
+                "字体包已缓存：",
+                "Font package cached: ",
+                "フォントパッケージキャッシュ: ",
+            ),
+            value.trim_start_matches("字体包已缓存：")
+        ),
+        value if value.starts_with("已安装/更新 ") && value.ends_with(" 个字体文件。") => {
+            value
+                .replace(
+                    "已安装/更新 ",
+                    i18n::tr(
+                        language,
+                        "已安装/更新 ",
+                        "Installed/updated ",
+                        "インストール/更新済み ",
+                    ),
+                )
+                .replace(
+                    " 个字体文件。",
+                    i18n::tr(
+                        language,
+                        " 个字体文件。",
+                        " font files.",
+                        " 個のフォントファイル。",
+                    ),
+                )
+        }
         "准备安装" => i18n::tr(
             language,
             "准备安装",
@@ -694,6 +863,39 @@ fn localize_dialog_text(text: &str, language: i32) -> String {
 fn localize_dialog_line(line: &str, language: i32) -> String {
     match line {
         "安装完成。" => i18n::tr(language, "安装完成。", "Install complete.", "インストール完了。").to_string(),
+        "Maple Mono NF CN 自动安装完成。" => i18n::tr(
+            language,
+            "Maple Mono NF CN 自动安装完成。",
+            "Maple Mono NF CN was installed automatically.",
+            "Maple Mono NF CN の自動インストールが完了しました。",
+        )
+        .to_string(),
+        value if value.starts_with("已安装/更新 ") && value.ends_with(" 个字体文件。") => value
+            .replace(
+                "已安装/更新 ",
+                i18n::tr(
+                    language,
+                    "已安装/更新 ",
+                    "Installed/updated ",
+                    "インストール/更新済み ",
+                ),
+            )
+            .replace(
+                " 个字体文件。",
+                i18n::tr(language, " 个字体文件。", " font files.", " 個のフォントファイル。"),
+            ),
+        value if value.starts_with("来源：") => format!(
+            "{}{}",
+            i18n::tr(language, "来源：", "Source: ", "ソース: "),
+            value.trim_start_matches("来源：")
+        ),
+        "如果当前界面没有立刻切换字体，请重启工具箱。" => i18n::tr(
+            language,
+            "如果当前界面没有立刻切换字体，请重启工具箱。",
+            "If the UI font does not switch immediately, restart the toolbox.",
+            "UI フォントがすぐに切り替わらない場合は、ツールボックスを再起動してください。",
+        )
+        .to_string(),
         "Payload.dll 和 ProjectReboundServerWrapper.exe 已从在线 Nightly Release 更新。" => i18n::tr(
             language,
             "Payload.dll 和 ProjectReboundServerWrapper.exe 已从在线 Nightly Release 更新。",

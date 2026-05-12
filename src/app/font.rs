@@ -22,18 +22,20 @@ impl AppController {
             )
             .into(),
         );
-        self.show_app_dialog(
-            self.tr("界面字体", "UI Font", "UI フォント"),
-            self.tr(
-                "未检测到 Maple Mono NF CN，正在自动下载并安装字体。\n字体包约 150 MB，请保持网络连接。安装完成后如果界面没有立刻切换字体，请重启工具箱。",
-                "Maple Mono NF CN was not found, so the toolbox is downloading and installing it automatically.\nThe font package is about 150 MB. Keep the network connected. If the UI does not switch fonts immediately after installation, restart the toolbox.",
-                "Maple Mono NF CN が見つからないため、自動でダウンロードしてインストールします。\nフォントパッケージは約 150 MB です。ネットワーク接続を維持してください。インストール後すぐに UI フォントが切り替わらない場合は、ツールボックスを再起動してください。",
-            ),
-            self.tr("知道了", "Got it", "了解"),
-            "",
-            false,
-            false,
+        self.ui.set_busy(true);
+        self.ui.set_install_progress_cancelable(false);
+        self.ui.set_install_progress_visible(true);
+        self.ui.set_install_progress_value(0.0);
+        self.ui.set_install_progress_percent("0%".into());
+        self.ui.set_install_progress_title(
+            self.tr("准备字体", "Preparing font", "フォント準備中")
+                .into(),
         );
+        self.set_install_progress_detail_text(self.tr(
+            "未检测到 Maple Mono NF CN，正在自动下载并安装字体。",
+            "Maple Mono NF CN was not found. Downloading and installing it automatically.",
+            "Maple Mono NF CN が見つからないため、自動でダウンロードしてインストールします。",
+        ));
         self.pending_dialog_action = PendingDialogAction::None;
         self.append_log(&format!(
             "[{}] 未检测到 Maple Mono NF CN，开始自动下载并安装。",
@@ -42,7 +44,11 @@ impl AppController {
 
         let core = self.core.clone();
         let tx = self.tx.clone();
-        thread::spawn(move || match core.install_ui_font() {
+        let progress_tx = tx.clone();
+        let progress = Arc::new(move |progress: InstallProgress| {
+            let _ = progress_tx.send(AppMessage::InstallProgress(progress));
+        });
+        thread::spawn(move || match core.install_ui_font_with_progress(progress) {
             Ok(dialog) => {
                 let _ = tx.send(AppMessage::ActionFinished {
                     title: "字体安装".to_string(),

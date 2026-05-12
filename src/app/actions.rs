@@ -32,6 +32,7 @@ impl AppController {
             self.tr("安装中...", "Installing...", "インストール中...")
                 .into(),
         );
+        self.ui.set_install_progress_cancelable(true);
         self.ui.set_install_progress_visible(true);
         self.ui.set_install_progress_value(0.0);
         self.ui.set_install_progress_percent("0%".into());

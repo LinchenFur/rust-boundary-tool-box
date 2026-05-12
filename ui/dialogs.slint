@@ -309,6 +309,7 @@ export component AppDialog inherits Rectangle {
 
 export component InstallProgressDialog inherits Rectangle {
     in property <bool> busy;
+    in property <bool> cancelable: true;
     in property <float> progress: 0.0;
     in property <string> percent: "0%";
     in property <string> title: "";
@@ -360,14 +361,14 @@ export component InstallProgressDialog inherits Rectangle {
 
                     Action {
                         width: 156px;
-                        label: busy ? I18n.tr("取消", "Cancel", "キャンセル") : I18n.tr("完成", "Done", "完了");
+                        label: busy ? (cancelable ? I18n.tr("取消", "Cancel", "キャンセル") : I18n.tr("处理中", "Working", "処理中")) : I18n.tr("完成", "Done", "完了");
                         sub: "";
-                        enabled: true;
+                        enabled: !busy || cancelable;
                         accent: busy ? #ffb4ab : #62e2c1;
                         clicked => {
-                            if busy {
+                            if busy && cancelable {
                                 root.cancel_clicked();
-                            } else {
+                            } else if !busy {
                                 root.close_clicked();
                             }
                         }

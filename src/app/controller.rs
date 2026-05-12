@@ -182,6 +182,7 @@ impl AppController {
         ui.set_is_admin(is_admin);
         ui.set_pulse(false);
         ui.set_install_progress_visible(false);
+        ui.set_install_progress_cancelable(true);
         ui.set_install_progress_value(0.0);
         ui.set_install_progress_percent("0%".into());
         ui.set_install_progress_title("".into());

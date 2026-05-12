@@ -51,27 +51,52 @@ impl InstallerCore {
             || font_registry_contains(HKEY_LOCAL_MACHINE)?)
     }
 
-    /// 下载 Maple Mono NF CN 并安装到当前用户字体目录。
-    pub fn install_ui_font(&self) -> Result<String> {
+    /// 下载 Maple Mono NF CN 并安装到当前用户字体目录，同时报告可见进度。
+    pub fn install_ui_font_with_progress(&self, progress: ProgressReporter) -> Result<String> {
         if self.ui_font_installed()? {
+            report_font_progress(
+                &progress,
+                1.0,
+                "字体已安装",
+                &format!("{UI_FONT_FAMILY} 已安装，无需重复下载。"),
+            );
             return Ok(format!("{UI_FONT_FAMILY} 已安装，无需重复下载。"));
         }
 
+        report_font_progress(
+            &progress,
+            0.02,
+            "准备字体",
+            "未检测到界面字体，准备获取最新字体包。",
+        );
         self.log(format!(
             "字体检查：未检测到 {UI_FONT_FAMILY}，准备自动下载。"
         ));
+        report_font_progress(
+            &progress,
+            0.08,
+            "查询字体版本",
+            "正在读取 Maple Mono 最新 Release。",
+        );
         let asset = fetch_maple_font_asset()?;
         self.log(format!(
             "下载字体：{} / {}",
             asset.release_tag, asset.zip_name
         ));
 
-        let zip_bytes = self.cached_or_downloaded_font_zip(&asset)?;
+        let zip_bytes = self.cached_or_downloaded_font_zip(&asset, &progress)?;
+        report_font_progress(&progress, 0.86, "安装字体", "正在解压并注册字体文件。");
         let installed = install_font_archive(&zip_bytes)?;
         if installed == 0 {
             bail!("字体压缩包中没有找到可安装的 TTF/OTF 文件。");
         }
         broadcast_font_change();
+        report_font_progress(
+            &progress,
+            1.0,
+            "字体安装完成",
+            &format!("已安装/更新 {installed} 个字体文件。"),
+        );
         self.log(format!(
             "字体安装完成：已写入 {} 个字体文件，来源 {}。",
             installed, asset.release_tag
@@ -83,10 +108,15 @@ impl InstallerCore {
         ))
     }
 
-    fn cached_or_downloaded_font_zip(&self, asset: &FontReleaseAsset) -> Result<Vec<u8>> {
+    fn cached_or_downloaded_font_zip(
+        &self,
+        asset: &FontReleaseAsset,
+        progress: &ProgressReporter,
+    ) -> Result<Vec<u8>> {
         let cache_dir = self.installer_home.join("fonts");
         ensure_dir(&cache_dir)?;
         let zip_path = cache_dir.join(&asset.zip_name);
+        report_font_progress(progress, 0.14, "校验字体缓存", "正在读取字体包校验信息。");
         let expected_sha = match &asset.sha_url {
             Some(url) => download_text(&self.proxied_github_url(url))
                 .ok()
@@ -102,6 +132,12 @@ impl InstallerCore {
                 .is_none_or(|expected| sha256_hex(&bytes).eq_ignore_ascii_case(expected))
             {
                 self.log(format!("使用字体缓存：{}", zip_path.display()));
+                report_font_progress(
+                    progress,
+                    0.80,
+                    "使用字体缓存",
+                    &format!("字体包已缓存：{}", zip_path.display()),
+                );
                 return Ok(bytes);
             }
             self.log(format!(
@@ -110,8 +146,16 @@ impl InstallerCore {
             ));
         }
 
-        let bytes = download_bytes(&self.proxied_github_url(&asset.zip_url))?;
+        let source_url = self.proxied_github_url(&asset.zip_url);
+        report_font_progress(
+            progress,
+            0.18,
+            "下载字体",
+            &format!("开始下载 {}", asset.zip_name),
+        );
+        let bytes = download_bytes(&source_url, Some(progress))?;
         if let Some(expected) = expected_sha {
+            report_font_progress(progress, 0.82, "校验字体包", "正在校验字体包 SHA256。");
             let actual = sha256_hex(&bytes);
             if !actual.eq_ignore_ascii_case(&expected) {
                 bail!("字体包校验失败：期望 {expected}，实际 {actual}");
@@ -188,16 +232,94 @@ fn download_text(url: &str) -> Result<String> {
         .with_context(|| format!("读取响应失败：{url}"))
 }
 
-fn download_bytes(url: &str) -> Result<Vec<u8>> {
-    let bytes = http_client()?
+fn download_bytes(url: &str, progress: Option<&ProgressReporter>) -> Result<Vec<u8>> {
+    let mut response = http_client()?
         .get(url)
         .send()
         .with_context(|| format!("下载失败：{url}"))?
         .error_for_status()
-        .with_context(|| format!("服务器返回错误：{url}"))?
-        .bytes()
-        .with_context(|| format!("读取下载内容失败：{url}"))?;
-    Ok(bytes.to_vec())
+        .with_context(|| format!("服务器返回错误：{url}"))?;
+    let total = response.content_length();
+    let mut bytes = Vec::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut downloaded = 0_u64;
+    let mut last_reported = 0_u64;
+    loop {
+        let read = response
+            .read(&mut buffer)
+            .with_context(|| format!("读取下载内容失败：{url}"))?;
+        if read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..read]);
+        downloaded += read as u64;
+        let finished = total.is_some_and(|total| downloaded >= total);
+        if finished || downloaded.saturating_sub(last_reported) >= 1024 * 1024 {
+            if let Some(progress) = progress {
+                report_font_progress(
+                    progress,
+                    font_download_value(downloaded, total),
+                    "下载字体",
+                    &format_font_download_detail(downloaded, total),
+                );
+            }
+            last_reported = downloaded;
+        }
+    }
+    if let Some(progress) = progress {
+        report_font_progress(
+            progress,
+            font_download_value(downloaded, total),
+            "下载字体",
+            &format_font_download_detail(downloaded, total),
+        );
+    }
+    Ok(bytes)
+}
+
+fn report_font_progress(progress: &ProgressReporter, value: f32, title: &str, detail: &str) {
+    progress(InstallProgress {
+        value: value.clamp(0.0, 1.0),
+        title: title.to_string(),
+        detail: detail.to_string(),
+    });
+}
+
+fn font_download_value(downloaded: u64, total: Option<u64>) -> f32 {
+    match total {
+        Some(total) if total > 0 => {
+            0.18 + (downloaded as f32 / total as f32).clamp(0.0, 1.0) * 0.60
+        }
+        _ => {
+            let soft_cap = 150.0 * 1024.0 * 1024.0;
+            0.18 + ((downloaded as f32 / soft_cap).min(1.0) * 0.52)
+        }
+    }
+}
+
+fn format_font_download_detail(downloaded: u64, total: Option<u64>) -> String {
+    match total {
+        Some(total) if total > 0 => format!(
+            "字体包：已下载 {} / {} ({:.0}%)",
+            format_size(downloaded),
+            format_size(total),
+            (downloaded as f64 / total as f64 * 100.0).clamp(0.0, 100.0)
+        ),
+        _ => format!("字体包：已下载 {}", format_size(downloaded)),
+    }
+}
+
+fn format_size(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = 1024.0 * 1024.0;
+    let bytes = bytes as f64;
+    if bytes >= MB {
+        format!("{:.1} MB", bytes / MB)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes / KB)
+    } else {
+        format!("{} B", bytes as u64)
+    }
 }
 
 fn parse_sha256(text: &str) -> Option<String> {

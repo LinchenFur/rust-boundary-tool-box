@@ -40,6 +40,7 @@ export component AppWindow inherits Window {
     in-out property <bool> is_admin: true;
     in-out property <bool> pulse: false;
     in-out property <bool> install_progress_visible: false;
+    in-out property <bool> install_progress_cancelable: true;
     in-out property <float> install_progress_value: 0.0;
     in-out property <string> install_progress_percent: "0%";
     in-out property <string> install_progress_title: "";
@@ -363,6 +364,7 @@ export component AppWindow inherits Window {
             width: parent.width;
             height: parent.height;
             busy: root.busy;
+            cancelable: root.install_progress_cancelable;
             progress: root.install_progress_value;
             percent: root.install_progress_percent;
             title: root.install_progress_title;

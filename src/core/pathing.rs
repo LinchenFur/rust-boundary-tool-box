@@ -278,7 +278,7 @@ pub(crate) fn detect_steam_game_win64() -> Result<(PathBuf, String)> {
                 Ok(()) => {
                     return Ok((
                         win64_path.clone(),
-                        format!("已通过 Steam 自动识别：{}", win64_path.display()),
+                        format!("已通过 Steam 自动识别：\n{}", win64_path.display()),
                     ));
                 }
                 Err(error) => {
