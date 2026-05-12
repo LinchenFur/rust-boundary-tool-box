@@ -521,6 +521,17 @@ impl AppController {
             });
         }
         {
+            let controller = Rc::clone(controller);
+            let app = controller.borrow().ui.clone_strong();
+            app.window().on_close_requested(move || {
+                if controller.borrow_mut().request_window_close() {
+                    CloseRequestResponse::HideWindow
+                } else {
+                    CloseRequestResponse::KeepWindowShown
+                }
+            });
+        }
+        {
             let ui = controller.borrow().ui.as_weak();
             ui.unwrap().on_window_drag_started(move || {
                 if let Some(app) = ui.upgrade() {
@@ -540,10 +551,14 @@ impl AppController {
             });
         }
         {
+            let controller = Rc::clone(controller);
             let ui = controller.borrow().ui.as_weak();
             ui.unwrap().on_window_close_clicked(move || {
-                if let Some(app) = ui.upgrade() {
-                    let _ = app.hide();
+                if ui.upgrade().is_some() {
+                    let mut controller = controller.borrow_mut();
+                    if controller.request_window_close() {
+                        controller.close_window_now();
+                    }
                 }
             });
         }

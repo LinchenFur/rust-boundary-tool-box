@@ -695,7 +695,7 @@ dependencies = [
 
 [[package]]
 name = "boundary_toolbox"
-version = "19.19.99"
+version = "19.20.0"
 dependencies = [
  "anyhow",
  "chrono",

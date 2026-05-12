@@ -98,6 +98,7 @@ impl AppController {
             PendingDialogAction::None => self.hide_app_dialog(),
             PendingDialogAction::ManualPathInput => self.confirm_manual_path_from_dialog(),
             PendingDialogAction::DownloadUpdate { result } => self.start_update_download(result),
+            PendingDialogAction::CloseApplication => self.close_window_now(),
             PendingDialogAction::LaunchWithConflicts {
                 target,
                 mode,

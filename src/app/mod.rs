@@ -16,7 +16,9 @@ use std::time::Duration;
 
 use anyhow::{Result, bail};
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use slint::{
+    CloseRequestResponse, ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel,
+};
 
 use crate::core::{
     APP_VERSION, InstallCancelToken, InstallProgress, InstallerCore, LaunchMode, MONITORED_PORTS,
@@ -26,6 +28,7 @@ use crate::vnt_platform::{VntEvent, VntLaunchOptions, VntSession};
 
 mod actions;
 mod background;
+mod close_guard;
 mod controller;
 mod diagnostics;
 mod dialogs;
@@ -135,6 +138,7 @@ enum PendingDialogAction {
     DownloadUpdate {
         result: UpdateCheckResult,
     },
+    CloseApplication,
 }
 
 /// 供 Slint 回调共享的可变应用状态。
