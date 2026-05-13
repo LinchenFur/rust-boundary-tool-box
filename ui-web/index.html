@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>边境社区服工具箱</title>
+    <style>
+      /*__LGGC_CSS__*/
+    </style>
+    <style>
+      /*__APP_CSS__*/
+    </style>
+  </head>
+  <body>
+    <div class="toolbox-window">
+      <header class="lggc titlebar">
+        <div class="brand">
+          <b>BOUNDARY</b>
+          <span>社区服工具箱</span>
+        </div>
+        <div class="status-line">
+          <b id="statusText">就绪</b>
+          <span id="statusDetail">正在初始化 WebView</span>
+        </div>
+        <div class="language-switch" aria-label="语言">
+          <button class="lggc flag active" type="button" data-language="zh">🇨🇳</button>
+          <button class="lggc flag" type="button" data-language="en">🇺🇸</button>
+          <button class="lggc flag" type="button" data-language="ja">🇯🇵</button>
+        </div>
+        <div class="window-controls" aria-label="窗口控制">
+          <button class="lggc window-control" type="button" data-window-command="window-minimize" aria-label="最小化">
+            -
+          </button>
+          <button class="lggc window-control close" type="button" data-window-command="window-close" aria-label="关闭">
+            ×
+          </button>
+        </div>
+      </header>
+
+      <nav class="lggc page-tabs" aria-label="主功能">
+        <button class="lggc tab active" data-page="launch" type="button">启动</button>
+        <button class="lggc tab" data-page="directory" type="button">目录</button>
+        <button class="lggc tab" data-page="diagnostics" type="button">诊断</button>
+        <button class="lggc tab" data-page="network" type="button">联机</button>
+        <button class="lggc tab" data-page="servers" type="button">服务器</button>
+        <button class="lggc tab" data-page="settings" type="button">设置</button>
+      </nav>
+
+      <main class="work-area">
+        <section class="view active" id="page-launch">
+          <div class="page-head">
+            <h1>启动</h1>
+            <p>PVP 启动登录服务器和游戏；PVE 会额外启动 ProjectRebound 包装器。</p>
+          </div>
+
+          <div class="split-grid launch-grid">
+            <section class="lggc panel">
+              <div class="panel-head">
+                <b>启动模式</b>
+                <span>选择流程后直接启动</span>
+              </div>
+              <div class="mode-table">
+                <button class="lggc mode-row" data-command="launch-pvp" type="button">
+                  <b>PVP</b>
+                  <span>登录服务器 + 游戏</span>
+                </button>
+                <button class="lggc mode-row" data-command="launch-pve" type="button">
+                  <b>PVE</b>
+                  <span>登录服务器 + 包装器 + 游戏</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="lggc panel">
+              <div class="panel-head">
+                <b>目标与安装</b>
+                <span id="targetPath">未锁定</span>
+              </div>
+              <label class="field">
+                <span>Boundary Win64 目录</span>
+                <input id="targetInput" type="text" placeholder="Boundary\\ProjectBoundary\\Binaries\\Win64" />
+              </label>
+              <div class="toolbar">
+                <button class="lggc command" data-command="set-target" data-from-input="targetInput" type="button">
+                  设置目录
+                </button>
+                <button class="lggc command" data-command="install" type="button" disabled>安装</button>
+                <button class="lggc command danger" data-command="uninstall" type="button" disabled>卸载</button>
+              </div>
+            </section>
+
+            <section class="lggc panel full-row">
+              <div class="panel-head">
+                <b>启动前检查</b>
+                <span>进程和端口</span>
+              </div>
+              <div class="toolbar">
+                <button class="lggc command" data-command="detect-processes" type="button">进程检测</button>
+                <button class="lggc command" data-command="refresh-ports" type="button">刷新端口</button>
+                <button class="lggc command danger" data-command="stop-processes" type="button">关闭相关进程</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="page-directory">
+          <div class="page-head">
+            <h1>目录</h1>
+            <p>可以填入游戏根目录、ProjectBoundary 目录或 Binaries\\Win64 目录。</p>
+          </div>
+          <section class="lggc panel wide-panel">
+            <div class="panel-head">
+              <b>目录设置</b>
+              <span>路径会自动规整到 Win64 目录</span>
+            </div>
+            <label class="field">
+              <span>目录路径</span>
+              <input
+                id="directoryInput"
+                type="text"
+                placeholder="D:\\SteamLibrary\\steamapps\\common\\Boundary\\ProjectBoundary\\Binaries\\Win64"
+              />
+            </label>
+            <div class="toolbar">
+              <button class="lggc command" data-command="set-target" data-from-input="directoryInput" type="button">
+                应用目录
+              </button>
+            </div>
+            <div class="info-grid">
+              <article><b>当前目标</b><span id="directoryTarget">未锁定</span></article>
+              <article><b>来源</b><span id="targetSource">自动检测中</span></article>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="page-diagnostics">
+          <div class="page-head">
+            <h1>诊断</h1>
+            <p>检查端口、相关进程，并结束可能阻塞启动或安装的进程。</p>
+          </div>
+          <div class="split-grid diagnostics-grid">
+            <section class="lggc panel action-panel">
+              <div class="panel-head">
+                <b>操作</b>
+                <span>运行时</span>
+              </div>
+              <button class="lggc command fill" data-command="detect-processes" type="button">进程检测</button>
+              <button class="lggc command fill danger" data-command="stop-processes" type="button">关闭相关进程</button>
+              <button class="lggc command fill" data-command="refresh-ports" type="button">刷新端口</button>
+            </section>
+            <section class="lggc panel port-panel">
+              <div class="panel-head">
+                <b>端口状态</b>
+                <span>TCP / UDP</span>
+              </div>
+              <div class="port-list" id="portList">
+                <div class="empty-state">等待端口检测</div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="page-network">
+          <div class="page-head">
+            <h1>联机</h1>
+            <p>VNT 控制器还在迁移到 WebView 数据层。</p>
+          </div>
+          <section class="lggc panel wide-panel">
+            <div class="panel-head"><b>VNT</b><span>未接入</span></div>
+            <p class="muted">原生 VNT 控制器会继续迁移到 WebView 数据层。</p>
+            <div class="toolbar">
+              <button class="lggc command" type="button" disabled>启动联机</button>
+              <button class="lggc command" type="button" disabled>停止联机</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="page-servers">
+          <div class="page-head">
+            <h1>服务器</h1>
+            <p>服务器列表会继续从原有数据层迁移。</p>
+          </div>
+          <section class="lggc panel wide-panel">
+            <div class="panel-head"><b>服务器列表</b><span>暂无数据</span></div>
+            <button class="lggc command" type="button" disabled>刷新服务器</button>
+            <div class="empty-state">暂无服务器数据</div>
+          </section>
+        </section>
+
+        <section class="view" id="page-settings">
+          <div class="page-head">
+            <h1>设置</h1>
+            <p>更新、下载代理和工具状态。</p>
+          </div>
+          <section class="lggc panel wide-panel">
+            <div class="panel-head">
+              <b>下载代理</b>
+              <span>GitHub 下载加速</span>
+            </div>
+            <div class="toolbar">
+              <button class="lggc command" data-command="check-update" type="button">检查更新</button>
+              <button class="lggc command" data-command="set-proxy" data-proxy-default="true" type="button">
+                使用默认代理
+              </button>
+            </div>
+            <label class="field">
+              <span>代理地址</span>
+              <input id="proxyInput" type="text" value="https://git-proxy.cubland.icu/" />
+            </label>
+            <div class="toolbar">
+              <button class="lggc command" data-command="set-proxy" data-from-input="proxyInput" type="button">
+                保存代理
+              </button>
+            </div>
+            <div class="info-grid four">
+              <article><b>版本</b><span id="appVersion">19.20.0</span></article>
+              <article><b>权限</b><span id="adminState">检测中</span></article>
+              <article><b>载荷</b><span id="payloadState">检测中</span></article>
+              <article><b>代理</b><span id="proxyState">https://git-proxy.cubland.icu/</span></article>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="lggc bottom-dock">
+        <section class="flow-summary">
+          <b>流程</b>
+          <span>PVP：登录服务器 -> 游戏</span>
+          <span>PVE：登录服务器 -> 包装器 -> 游戏</span>
+        </section>
+        <section class="session-log">
+          <b>日志</b>
+          <pre id="logOutput">等待操作...</pre>
+        </section>
+      </footer>
+    </div>
+
+    <div class="lggc admin-banner hidden" id="adminBanner">未使用管理员模式启动</div>
+
+    <div class="modal-layer hidden" id="modalLayer" role="dialog" aria-modal="true">
+      <section class="lggc modal">
+        <button class="lggc modal-close" id="modalClose" type="button">×</button>
+        <h2 id="modalTitle">提示</h2>
+        <div class="modal-scroll">
+          <p id="modalText"></p>
+          <div class="progress-wrap hidden" id="progressWrap">
+            <div class="progress-track"><i id="progressBar"></i></div>
+            <p id="progressDetail"></p>
+            <button class="lggc command" data-command="cancel-install" type="button">取消</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="lggc toast hidden" id="toast"></div>
+
+    <script>
+      /*__APP_JS__*/
+    </script>
+  </body>
+</html>

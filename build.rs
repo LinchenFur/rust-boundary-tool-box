@@ -1,6 +1,6 @@
 //! 工具箱的构建期资源流水线。
 //!
-//! 可执行文件会把原 Python 工具箱载荷打成 zip 内嵌，编译 Slint UI，
+//! 可执行文件会把原 Python 工具箱载荷打成 zip 内嵌，
 //! 并生成 Windows 图标。公开仓库或纯源码构建允许缺少私有载荷文件，
 //! 这种情况下内嵌 zip 会保持为空，真正执行安装时会通过运行时校验快速失败。
 
@@ -32,14 +32,13 @@ fn main() -> Result<()> {
         .ok();
 
     println!("cargo:rerun-if-env-changed=BOUNDARY_PAYLOAD_ROOT");
-    slint_build::compile("ui/appwindow.slint").context("compile Slint UI")?;
     build_payload_zip(payload_root.as_deref(), &out_dir)?;
     build_icon(&manifest_dir, project_root, &out_dir)?;
 
     for asset in icon_asset_candidates(&manifest_dir, project_root) {
         println!("cargo:rerun-if-changed={}", asset.display());
     }
-    emit_ui_rerun(&manifest_dir)?;
+    emit_web_ui_rerun(&manifest_dir)?;
     if let Some(payload_root) = &payload_root {
         for item in MANAGED_ITEMS {
             println!(
@@ -57,15 +56,18 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// 递归监听 Slint UI 文件，避免拆分后的子文件变更被 Cargo 缓存漏掉。
-fn emit_ui_rerun(manifest_dir: &Path) -> Result<()> {
-    let ui_dir = manifest_dir.join("ui");
+/// 递归监听 WebView UI 文件，避免前端资源变更被 Cargo 缓存漏掉。
+fn emit_web_ui_rerun(manifest_dir: &Path) -> Result<()> {
+    let ui_dir = manifest_dir.join("ui-web");
+    if !ui_dir.exists() {
+        return Ok(());
+    }
     for entry in WalkDir::new(&ui_dir)
         .into_iter()
         .filter_map(std::result::Result::ok)
     {
         let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "slint") {
+        if path.is_file() {
             println!("cargo:rerun-if-changed={}", path.display());
         }
     }

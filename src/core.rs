@@ -4,6 +4,8 @@
 //! 替换文件、恢复备份、结束进程、读取 Steam 元数据、校验在线下载等高风险动作
 //! 都收敛在这里处理。
 
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 use std::sync::{
     Arc, RwLock,
@@ -324,6 +326,8 @@ pub(crate) mod runtime_ops;
 pub(crate) mod steam;
 pub(crate) mod util;
 
+#[allow(unused_imports)]
 pub use installer::{normalize_github_proxy_prefix, proxied_github_url};
+#[allow(unused_imports)]
 pub use process::format_port_conflicts;
 pub use util::{is_running_as_administrator, now_text};

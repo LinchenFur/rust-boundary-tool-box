@@ -4,6 +4,8 @@
 //! 对外 API 保持很小：带选项启动、发出快照/事件、通过 oneshot channel 停止。
 //! 整个流程不涉及 web UI 或 webview。
 
+#![allow(dead_code)]
+
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};

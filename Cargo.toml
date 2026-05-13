@@ -26,8 +26,6 @@ reqwest = { version = "0.12.24", default-features = false, features = ["blocking
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
-# 原生 UI 工具包，不引入 webview 依赖。
-slint = { version = "1.16.0", features = ["unstable-winit-030"] }
 sysinfo = "0.38.4"
 # 嵌入式 VNT 核心需要 Tokio 运行时。
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "sync", "time"] }
@@ -37,6 +35,20 @@ vnt-ipc = { path = "vendor/vnt/vnt-ipc" }
 walkdir = "2.5.0"
 winreg = "0.56.0"
 zip = { version = "8.5.1", default-features = true, features = ["deflate"] }
+# WebView2 宿主用于直接加载 LGGC 的 CSS/DOM 按钮效果。
+webview2-com = "0.38.2"
+# webview2-com 0.38.x 基于 windows 0.61，单独别名避免影响现有核心 Win32 调用。
+windows_061 = { package = "windows", version = "0.61.3", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Com",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 [dependencies.windows]
 # 使用 Win32 API 实现原子文件替换。
@@ -52,11 +64,10 @@ features = [
 ]
 
 [build-dependencies]
-# 构建脚本 build.rs 负责编译 Slint、嵌入 payload.zip 并生成 Windows 图标。
+# 构建脚本 build.rs 负责嵌入 payload.zip 并生成 Windows 图标。
 anyhow = "1.0.100"
 embed-resource = "3.0.6"
 image = { version = "0.25.8", default-features = true, features = ["jpeg", "png", "ico"] }
-slint-build = "1.16.0"
 walkdir = "2.5.0"
 zip = { version = "8.5.1", default-features = true, features = ["deflate"] }
 
