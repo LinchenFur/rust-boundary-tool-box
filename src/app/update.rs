@@ -100,12 +100,6 @@ pub(crate) fn download_release_asset(
         bail!("该 Release 未提供 boundary_toolbox.exe 资产");
     };
     let file_name = release_asset_file_name(&result.latest_tag);
-    let download_url = crate::core::proxied_github_url(proxy_prefix, asset_url);
-    let proxy_label = if proxy_prefix.trim().is_empty() {
-        "直连 GitHub".to_string()
-    } else {
-        proxy_prefix.trim().to_string()
-    };
     report_update_progress(
         &progress,
         0.02,
@@ -114,9 +108,22 @@ pub(crate) fn download_release_asset(
     );
     report_update_progress(
         &progress,
+        0.04,
+        "测速下载代理",
+        "正在测试 GitHub 代理节点速度。",
+    );
+    let selection = crate::core::select_fastest_github_proxy(proxy_prefix, asset_url);
+    let download_url = crate::core::proxied_github_url(&selection.prefix, asset_url);
+    report_update_progress(
+        &progress,
         0.05,
         "下载更新",
-        format!("使用下载代理：{proxy_label}"),
+        format!(
+            "使用下载代理：{}；可用 {}/{}",
+            selection.display_label(),
+            selection.reachable_count,
+            selection.tested_count
+        ),
     );
     match download_asset_to_dir(&download_url, runtime_dir, &file_name, &progress) {
         Ok(path) => Ok(path),

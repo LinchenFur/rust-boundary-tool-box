@@ -695,13 +695,15 @@ dependencies = [
 
 [[package]]
 name = "boundary_toolbox"
-version = "19.20.1"
+version = "19.20.2"
 dependencies = [
  "anyhow",
  "chrono",
+ "crc32fast",
  "crossbeam-channel",
  "embed-resource",
  "encoding_rs",
+ "flate2",
  "icu_provider",
  "image",
  "log",

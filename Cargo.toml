@@ -1,7 +1,7 @@
 [package]
 # 这是 Boundary 社区服工具箱的原生 Slint/Rust 重写版。
 name = "boundary_toolbox"
-version = "19.20.1"
+version = "19.20.2"
 edition = "2024"
 build = "build.rs"
 
@@ -11,8 +11,10 @@ anyhow = "1.0.100"
 chrono = { version = "0.4.42", features = ["serde"] }
 # 工作线程与 Slint 控制器之间的消息通道。
 crossbeam-channel = "0.5.15"
+crc32fast = "1.5.0"
 # 构建脚本生成图标时使用。
 image = { version = "0.25.8", default-features = true, features = ["jpeg", "png", "ico"] }
+flate2 = "1.1.5"
 # 让 ICU Provider 在 debug 下走 log crate，避免绕过日志过滤直接 eprintln。
 icu_provider = { version = "2.2.0", default-features = false, features = ["logging"] }
 # Windows 上 npm/cmd 输出可能使用系统代码页，失败弹窗需要兼容 GBK 解码。

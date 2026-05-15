@@ -563,6 +563,20 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "Maple Mono の最新 Release を読み込んでいます。",
         )
         .to_string(),
+        "测速下载代理" => i18n::tr(
+            language,
+            "测速下载代理",
+            "Testing download proxies",
+            "ダウンロードプロキシ測定中",
+        )
+        .to_string(),
+        "正在测试 GitHub 代理节点速度。" => i18n::tr(
+            language,
+            "正在测试 GitHub 代理节点速度。",
+            "Testing GitHub proxy node speed.",
+            "GitHub プロキシノードの速度を測定しています。",
+        )
+        .to_string(),
         "校验字体缓存" => i18n::tr(
             language,
             "校验字体缓存",
@@ -582,6 +596,20 @@ fn localize_install_text(text: &str, language: i32) -> String {
             "下载字体",
             "Downloading font",
             "フォントをダウンロード中",
+        )
+        .to_string(),
+        "读取字体目录" => i18n::tr(
+            language,
+            "读取字体目录",
+            "Reading font index",
+            "フォント索引を読み込み中",
+        )
+        .to_string(),
+        "正在读取远程字体包目录。" => i18n::tr(
+            language,
+            "正在读取远程字体包目录。",
+            "Reading the remote font package index.",
+            "リモートフォントパッケージの索引を読み込んでいます。",
         )
         .to_string(),
         "校验字体包" => i18n::tr(
@@ -629,6 +657,15 @@ fn localize_install_text(text: &str, language: i32) -> String {
             ),
             value.trim_start_matches("开始下载 ")
         ),
+        value if value.starts_with("下载字体文件 ") => value.replace(
+            "下载字体文件 ",
+            i18n::tr(
+                language,
+                "下载字体文件 ",
+                "Downloading font file ",
+                "フォントファイルをダウンロード中 ",
+            ),
+        ),
         value if value.starts_with("字体包：已下载 ") => value
             .replace(
                 "字体包：已下载 ",
@@ -649,6 +686,26 @@ fn localize_install_text(text: &str, language: i32) -> String {
                 "フォントパッケージキャッシュ: ",
             ),
             value.trim_start_matches("字体包已缓存：")
+        ),
+        value if value.starts_with("字体文件已缓存：") => format!(
+            "{}{}",
+            i18n::tr(
+                language,
+                "字体文件已缓存：",
+                "Font file cached: ",
+                "フォントファイルキャッシュ: ",
+            ),
+            value.trim_start_matches("字体文件已缓存：")
+        ),
+        value if value.starts_with("正在安装字体文件：") => format!(
+            "{}{}",
+            i18n::tr(
+                language,
+                "正在安装字体文件：",
+                "Installing font file: ",
+                "フォントファイルをインストール中: ",
+            ),
+            value.trim_start_matches("正在安装字体文件：")
         ),
         value if value.starts_with("已安装/更新 ") && value.ends_with(" 个字体文件。") => {
             value
@@ -742,10 +799,14 @@ fn localize_install_text(text: &str, language: i32) -> String {
         }
         value if value.starts_with("使用下载代理：") => {
             let proxy = value.trim_start_matches("使用下载代理：");
-            let proxy = if proxy == "直连 GitHub" {
-                i18n::tr(language, "直连 GitHub", "Direct GitHub", "GitHub 直接接続")
+            let proxy = if let Some(rest) = proxy.strip_prefix("直连 GitHub") {
+                format!(
+                    "{}{}",
+                    i18n::tr(language, "直连 GitHub", "Direct GitHub", "GitHub 直接接続"),
+                    rest
+                )
             } else {
-                proxy
+                proxy.to_string()
             };
             format!(
                 "{}{}",
@@ -994,11 +1055,11 @@ fn localize_dialog_text(text: &str, language: i32) -> String {
 fn localize_dialog_line(line: &str, language: i32) -> String {
     match line {
         "安装完成。" => i18n::tr(language, "安装完成。", "Install complete.", "インストール完了。").to_string(),
-        "Maple Mono NF CN 自动安装完成。" => i18n::tr(
+        "Maple Mono CN 自动安装完成。" => i18n::tr(
             language,
-            "Maple Mono NF CN 自动安装完成。",
-            "Maple Mono NF CN was installed automatically.",
-            "Maple Mono NF CN の自動インストールが完了しました。",
+            "Maple Mono CN 自动安装完成。",
+            "Maple Mono CN was installed automatically.",
+            "Maple Mono CN の自動インストールが完了しました。",
         )
         .to_string(),
         value if value.starts_with("已安装/更新 ") && value.ends_with(" 个字体文件。") => value

@@ -13,7 +13,7 @@ use std::sync::{
 use serde::{Deserialize, Serialize};
 
 /// 显示在 UI 中并写入安装元数据的应用版本。
-pub const APP_VERSION: &str = "19.20.1";
+pub const APP_VERSION: &str = "19.20.2";
 /// 游戏 Boundary 的 Steam App ID。
 pub const APP_ID: &str = "1364020";
 /// 用于校验 Binaries\Win64 目录的游戏主程序。
@@ -55,12 +55,12 @@ pub const REQUIRED_UDP_PORTS: &[u16] = &[7777, 9000];
 /// 游戏连接本地登录服务器所用的启动参数值。
 pub const LOCAL_LOGIC_SERVER_URL: &str = "http://127.0.0.1:8000";
 /// 工具箱 UI 首选字体。
-pub const UI_FONT_FAMILY: &str = "Maple Mono NF CN";
+pub const UI_FONT_FAMILY: &str = "Maple Mono CN";
 /// Maple Mono 官方 GitHub 最新 Release API。
 pub const MAPLE_FONT_LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/subframe7536/maple-font/releases/latest";
-/// 优先下载带 Nerd Font 和中文补全的非 hinted 包。
-pub const MAPLE_FONT_RELEASE_ASSET: &str = "MapleMono-NF-CN-unhinted.zip";
+/// 优先下载中文补全的非 hinted 包；实际安装时只按需拉取 UI 使用的字重。
+pub const MAPLE_FONT_RELEASE_ASSET: &str = "MapleMono-CN-unhinted.zip";
 /// 诊断页展示的端口行。
 pub const MONITORED_PORTS: &[(&str, u16)] = &[
     ("TCP", 6969),
@@ -314,6 +314,7 @@ pub(crate) mod cleanup;
 pub(crate) mod discovery;
 pub(crate) mod filesystem;
 pub(crate) mod font;
+pub(crate) mod github_proxy;
 pub(crate) mod install_ops;
 pub(crate) mod installer;
 pub(crate) mod metadata;
@@ -324,6 +325,7 @@ pub(crate) mod runtime_ops;
 pub(crate) mod steam;
 pub(crate) mod util;
 
+pub use github_proxy::select_fastest_github_proxy;
 pub use installer::{normalize_github_proxy_prefix, proxied_github_url};
 pub use process::format_port_conflicts;
 pub use util::{is_running_as_administrator, now_text};

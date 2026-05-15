@@ -35,13 +35,13 @@ impl AppController {
                 .into(),
         );
         self.set_install_progress_detail_text(self.tr(
-            "未检测到 Maple Mono NF CN，正在自动下载并安装字体。",
-            "Maple Mono NF CN was not found. Downloading and installing it automatically.",
-            "Maple Mono NF CN が見つからないため、自動でダウンロードしてインストールします。",
+            "未检测到 Maple Mono CN，正在自动下载并安装字体。",
+            "Maple Mono CN was not found. Downloading and installing it automatically.",
+            "Maple Mono CN が見つからないため、自動でダウンロードしてインストールします。",
         ));
         self.pending_dialog_action = PendingDialogAction::None;
         self.append_log(&format!(
-            "[{}] 未检测到 Maple Mono NF CN，开始自动下载并安装。",
+            "[{}] 未检测到 Maple Mono CN，开始自动下载并安装。",
             core::now_text()
         ));
 

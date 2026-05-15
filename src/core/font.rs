@@ -6,9 +6,12 @@ use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use super::util::ensure_dir;
+use super::*;
 use anyhow::{Context, Result, bail};
+use crc32fast::Hasher as Crc32Hasher;
+use flate2::read::DeflateDecoder;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{AddFontResourceExW, FONT_RESOURCE_CHARACTERISTICS};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -17,10 +20,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::PCWSTR;
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 use winreg::{HKEY, RegKey};
-use zip::ZipArchive;
-
-use super::util::ensure_dir;
-use super::*;
 
 const FONTS_REGISTRY_PATH: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts";
 
@@ -41,8 +40,25 @@ struct FontReleaseAsset {
     release_tag: String,
     zip_name: String,
     zip_url: String,
-    sha_url: Option<String>,
 }
+
+#[derive(Debug, Clone)]
+struct RemoteZipEntry {
+    name: String,
+    compression_method: u16,
+    crc32: u32,
+    compressed_size: u64,
+    uncompressed_size: u64,
+    local_header_offset: u64,
+}
+
+const UI_FONT_SUFFIXES: &[&str] = &[
+    "regular.ttf",
+    "medium.ttf",
+    "semibold.ttf",
+    "bold.ttf",
+    "extrabold.ttf",
+];
 
 impl InstallerCore {
     /// 检测系统或当前用户字体表中是否已经注册 UI 字体。
@@ -51,7 +67,7 @@ impl InstallerCore {
             || font_registry_contains(HKEY_LOCAL_MACHINE)?)
     }
 
-    /// 下载 Maple Mono NF CN 并安装到当前用户字体目录，同时报告可见进度。
+    /// 下载 Maple Mono CN 并安装到当前用户字体目录，同时报告可见进度。
     pub fn install_ui_font_with_progress(&self, progress: ProgressReporter) -> Result<String> {
         if self.ui_font_installed()? {
             report_font_progress(
@@ -84,11 +100,9 @@ impl InstallerCore {
             asset.release_tag, asset.zip_name
         ));
 
-        let zip_bytes = self.cached_or_downloaded_font_zip(&asset, &progress)?;
-        report_font_progress(&progress, 0.86, "安装字体", "正在解压并注册字体文件。");
-        let installed = install_font_archive(&zip_bytes)?;
+        let installed = self.cached_or_downloaded_ui_fonts(&asset, &progress)?;
         if installed == 0 {
-            bail!("字体压缩包中没有找到可安装的 TTF/OTF 文件。");
+            bail!("字体包中没有找到工具箱需要的 UI 字体文件。");
         }
         broadcast_font_change();
         report_font_progress(
@@ -108,62 +122,88 @@ impl InstallerCore {
         ))
     }
 
-    fn cached_or_downloaded_font_zip(
+    fn cached_or_downloaded_ui_fonts(
         &self,
         asset: &FontReleaseAsset,
         progress: &ProgressReporter,
-    ) -> Result<Vec<u8>> {
-        let cache_dir = self.installer_home.join("fonts");
+    ) -> Result<usize> {
+        let cache_dir = self.installer_home.join("fonts").join(&asset.release_tag);
         ensure_dir(&cache_dir)?;
-        let zip_path = cache_dir.join(&asset.zip_name);
-        report_font_progress(progress, 0.14, "校验字体缓存", "正在读取字体包校验信息。");
-        let expected_sha = match &asset.sha_url {
-            Some(url) => download_text(&self.proxied_github_url(url))
-                .ok()
-                .and_then(|text| parse_sha256(&text)),
-            None => None,
-        };
 
-        if zip_path.exists() {
-            let bytes = fs::read(&zip_path)
-                .with_context(|| format!("读取字体缓存失败：{}", zip_path.display()))?;
-            if expected_sha
-                .as_deref()
-                .is_none_or(|expected| sha256_hex(&bytes).eq_ignore_ascii_case(expected))
-            {
-                self.log(format!("使用字体缓存：{}", zip_path.display()));
-                report_font_progress(
-                    progress,
-                    0.80,
-                    "使用字体缓存",
-                    &format!("字体包已缓存：{}", zip_path.display()),
-                );
-                return Ok(bytes);
-            }
-            self.log(format!(
-                "字体缓存校验失败，重新下载：{}",
-                zip_path.display()
-            ));
-        }
-
-        let source_url = self.proxied_github_url(&asset.zip_url);
         report_font_progress(
             progress,
-            0.18,
-            "下载字体",
-            &format!("开始下载 {}", asset.zip_name),
+            0.12,
+            "测速下载代理",
+            "正在测试 GitHub 代理节点速度。",
         );
-        let bytes = download_bytes(&source_url, Some(progress))?;
-        if let Some(expected) = expected_sha {
-            report_font_progress(progress, 0.82, "校验字体包", "正在校验字体包 SHA256。");
-            let actual = sha256_hex(&bytes);
-            if !actual.eq_ignore_ascii_case(&expected) {
-                bail!("字体包校验失败：期望 {expected}，实际 {actual}");
-            }
+        let selection = select_fastest_github_proxy(&self.github_proxy_prefix(), &asset.zip_url);
+        self.log(format!(
+            "字体下载代理：{}；可用 {}/{}",
+            selection.display_label(),
+            selection.reachable_count,
+            selection.tested_count
+        ));
+        report_font_progress(
+            progress,
+            0.16,
+            "下载字体",
+            &format!(
+                "使用下载代理：{}；可用 {}/{}",
+                selection.display_label(),
+                selection.reachable_count,
+                selection.tested_count
+            ),
+        );
+
+        let source_url = proxied_github_url(&selection.prefix, &asset.zip_url);
+        report_font_progress(progress, 0.20, "读取字体目录", "正在读取远程字体包目录。");
+        let client = http_client()?;
+        let entries = fetch_remote_zip_entries(&client, &source_url)?;
+        let selected = select_ui_font_entries(&entries)?;
+        let mut installed = 0;
+        for (index, entry) in selected.iter().enumerate() {
+            let value = 0.24 + (index as f32 / selected.len() as f32) * 0.58;
+            let file_name = font_file_name(&entry.name)
+                .with_context(|| format!("字体条目名称无效：{}", entry.name))?;
+            let cache_path = cache_dir.join(&file_name);
+            let bytes = match cached_font_bytes(&cache_path, entry)? {
+                Some(bytes) => {
+                    report_font_progress(
+                        progress,
+                        value,
+                        "校验字体缓存",
+                        &format!("字体文件已缓存：{}", cache_path.display()),
+                    );
+                    bytes
+                }
+                None => {
+                    report_font_progress(
+                        progress,
+                        value,
+                        "下载字体",
+                        &format!(
+                            "下载字体文件 {}/{}：{}",
+                            index + 1,
+                            selected.len(),
+                            file_name
+                        ),
+                    );
+                    let bytes = download_remote_zip_entry(&client, &source_url, entry)?;
+                    fs::write(&cache_path, &bytes)
+                        .with_context(|| format!("写入字体缓存失败：{}", cache_path.display()))?;
+                    bytes
+                }
+            };
+            report_font_progress(
+                progress,
+                value + 0.03,
+                "安装字体",
+                &format!("正在安装字体文件：{file_name}"),
+            );
+            install_font_file_bytes(&file_name, &bytes)?;
+            installed += 1;
         }
-        fs::write(&zip_path, &bytes)
-            .with_context(|| format!("写入字体缓存失败：{}", zip_path.display()))?;
-        Ok(bytes)
+        Ok(installed)
     }
 }
 
@@ -194,21 +234,13 @@ fn fetch_maple_font_asset() -> Result<FontReleaseAsset> {
             release
                 .assets
                 .iter()
-                .find(|asset| asset.name.eq_ignore_ascii_case("MapleMono-NF-CN.zip"))
+                .find(|asset| asset.name.eq_ignore_ascii_case("MapleMono-CN.zip"))
         })
-        .context("Maple Mono 最新 Release 中没有找到 NF-CN 字体包")?;
-    let sha_name = zip.name.replace(".zip", ".sha256");
-    let sha_url = release
-        .assets
-        .iter()
-        .find(|asset| asset.name.eq_ignore_ascii_case(&sha_name))
-        .map(|asset| asset.browser_download_url.clone());
-
+        .context("Maple Mono 最新 Release 中没有找到 CN 字体包")?;
     Ok(FontReleaseAsset {
         release_tag: release.tag_name,
         zip_name: zip.name.clone(),
         zip_url: zip.browser_download_url.clone(),
-        sha_url,
     })
 }
 
@@ -232,106 +264,12 @@ fn download_text(url: &str) -> Result<String> {
         .with_context(|| format!("读取响应失败：{url}"))
 }
 
-fn download_bytes(url: &str, progress: Option<&ProgressReporter>) -> Result<Vec<u8>> {
-    let mut response = http_client()?
-        .get(url)
-        .send()
-        .with_context(|| format!("下载失败：{url}"))?
-        .error_for_status()
-        .with_context(|| format!("服务器返回错误：{url}"))?;
-    let total = response.content_length();
-    let mut bytes = Vec::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    let mut downloaded = 0_u64;
-    let mut last_reported = 0_u64;
-    loop {
-        let read = response
-            .read(&mut buffer)
-            .with_context(|| format!("读取下载内容失败：{url}"))?;
-        if read == 0 {
-            break;
-        }
-        bytes.extend_from_slice(&buffer[..read]);
-        downloaded += read as u64;
-        let finished = total.is_some_and(|total| downloaded >= total);
-        if finished || downloaded.saturating_sub(last_reported) >= 1024 * 1024 {
-            if let Some(progress) = progress {
-                report_font_progress(
-                    progress,
-                    font_download_value(downloaded, total),
-                    "下载字体",
-                    &format_font_download_detail(downloaded, total),
-                );
-            }
-            last_reported = downloaded;
-        }
-    }
-    if let Some(progress) = progress {
-        report_font_progress(
-            progress,
-            font_download_value(downloaded, total),
-            "下载字体",
-            &format_font_download_detail(downloaded, total),
-        );
-    }
-    Ok(bytes)
-}
-
 fn report_font_progress(progress: &ProgressReporter, value: f32, title: &str, detail: &str) {
     progress(InstallProgress {
         value: value.clamp(0.0, 1.0),
         title: title.to_string(),
         detail: detail.to_string(),
     });
-}
-
-fn font_download_value(downloaded: u64, total: Option<u64>) -> f32 {
-    match total {
-        Some(total) if total > 0 => {
-            0.18 + (downloaded as f32 / total as f32).clamp(0.0, 1.0) * 0.60
-        }
-        _ => {
-            let soft_cap = 150.0 * 1024.0 * 1024.0;
-            0.18 + ((downloaded as f32 / soft_cap).min(1.0) * 0.52)
-        }
-    }
-}
-
-fn format_font_download_detail(downloaded: u64, total: Option<u64>) -> String {
-    match total {
-        Some(total) if total > 0 => format!(
-            "字体包：已下载 {} / {} ({:.0}%)",
-            format_size(downloaded),
-            format_size(total),
-            (downloaded as f64 / total as f64 * 100.0).clamp(0.0, 100.0)
-        ),
-        _ => format!("字体包：已下载 {}", format_size(downloaded)),
-    }
-}
-
-fn format_size(bytes: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = 1024.0 * 1024.0;
-    let bytes = bytes as f64;
-    if bytes >= MB {
-        format!("{:.1} MB", bytes / MB)
-    } else if bytes >= KB {
-        format!("{:.1} KB", bytes / KB)
-    } else {
-        format!("{} B", bytes as u64)
-    }
-}
-
-fn parse_sha256(text: &str) -> Option<String> {
-    text.split_whitespace()
-        .find(|part| part.len() == 64 && part.chars().all(|ch| ch.is_ascii_hexdigit()))
-        .map(ToOwned::to_owned)
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
 }
 
 fn user_fonts_dir() -> Result<PathBuf> {
@@ -342,31 +280,255 @@ fn user_fonts_dir() -> Result<PathBuf> {
         .join("Fonts"))
 }
 
-fn install_font_archive(zip_bytes: &[u8]) -> Result<usize> {
+fn fetch_remote_zip_entries(
+    client: &reqwest::blocking::Client,
+    url: &str,
+) -> Result<Vec<RemoteZipEntry>> {
+    let length = remote_content_length(client, url)?;
+    let tail_size = length.min(128 * 1024);
+    let tail_start = length - tail_size;
+    let tail = download_range(client, url, tail_start, length - 1)?;
+    let eocd_offset = find_eocd(&tail).context("远程字体包不是有效 ZIP：缺少中央目录")?;
+    let eocd = &tail[eocd_offset..eocd_offset + 22];
+    let entry_count = read_u16(eocd, 10) as usize;
+    let central_size = read_u32(eocd, 12) as u64;
+    let central_offset = read_u32(eocd, 16) as u64;
+    if central_size == u32::MAX as u64 || central_offset == u32::MAX as u64 {
+        bail!("远程字体包使用 ZIP64，当前不支持按需读取。");
+    }
+    let central = download_range(
+        client,
+        url,
+        central_offset,
+        central_offset + central_size.saturating_sub(1),
+    )?;
+    parse_central_directory(&central, entry_count)
+}
+
+fn remote_content_length(client: &reqwest::blocking::Client, url: &str) -> Result<u64> {
+    if let Ok(response) = client
+        .head(url)
+        .send()
+        .and_then(|response| response.error_for_status())
+        && let Some(length) = response
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+    {
+        return Ok(length);
+    }
+
+    let response = client
+        .get(url)
+        .header(reqwest::header::RANGE, "bytes=0-0")
+        .send()
+        .with_context(|| format!("读取远程字体包大小失败：{url}"))?
+        .error_for_status()
+        .with_context(|| format!("远程字体包大小接口返回错误：{url}"))?;
+    parse_content_range_total(response.headers())
+        .or_else(|| response.content_length())
+        .context("远程字体包响应中没有 Content-Length/Content-Range")
+}
+
+fn parse_content_range_total(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    headers
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.rsplit('/').next())
+        .and_then(|value| value.parse::<u64>().ok())
+}
+
+fn download_range(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    start: u64,
+    end: u64,
+) -> Result<Vec<u8>> {
+    if end < start {
+        return Ok(Vec::new());
+    }
+    let mut response = client
+        .get(url)
+        .header(reqwest::header::RANGE, format!("bytes={start}-{end}"))
+        .send()
+        .with_context(|| format!("请求远程字体片段失败：{url}"))?
+        .error_for_status()
+        .with_context(|| format!("远程字体片段接口返回错误：{url}"))?;
+    if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+        bail!("下载代理不支持 Range 请求，拒绝下载完整字体包。");
+    }
+    let mut bytes = Vec::new();
+    response
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("读取远程字体片段失败：{url}"))?;
+    Ok(bytes)
+}
+
+fn find_eocd(bytes: &[u8]) -> Option<usize> {
+    bytes
+        .windows(4)
+        .rposition(|window| window == [b'P', b'K', 0x05, 0x06])
+}
+
+fn parse_central_directory(bytes: &[u8], expected_count: usize) -> Result<Vec<RemoteZipEntry>> {
+    let mut entries = Vec::with_capacity(expected_count);
+    let mut offset = 0usize;
+    while offset + 46 <= bytes.len() {
+        if &bytes[offset..offset + 4] != b"PK\x01\x02" {
+            bail!("远程字体包中央目录损坏。");
+        }
+        let compression_method = read_u16(bytes, offset + 10);
+        let crc32 = read_u32(bytes, offset + 16);
+        let compressed_size = read_u32(bytes, offset + 20) as u64;
+        let uncompressed_size = read_u32(bytes, offset + 24) as u64;
+        let name_len = read_u16(bytes, offset + 28) as usize;
+        let extra_len = read_u16(bytes, offset + 30) as usize;
+        let comment_len = read_u16(bytes, offset + 32) as usize;
+        let local_header_offset = read_u32(bytes, offset + 42) as u64;
+        let name_start = offset + 46;
+        let name_end = name_start + name_len;
+        if name_end > bytes.len() {
+            bail!("远程字体包中央目录文件名越界。");
+        }
+        let name = String::from_utf8_lossy(&bytes[name_start..name_end]).to_string();
+        entries.push(RemoteZipEntry {
+            name,
+            compression_method,
+            crc32,
+            compressed_size,
+            uncompressed_size,
+            local_header_offset,
+        });
+        offset = name_end + extra_len + comment_len;
+    }
+    if entries.len() != expected_count {
+        bail!(
+            "远程字体包中央目录条目数量异常：期望 {expected_count}，实际 {}。",
+            entries.len()
+        );
+    }
+    Ok(entries)
+}
+
+fn select_ui_font_entries(entries: &[RemoteZipEntry]) -> Result<Vec<RemoteZipEntry>> {
+    let mut selected = Vec::new();
+    for suffix in UI_FONT_SUFFIXES {
+        let entry = entries
+            .iter()
+            .find(|entry| ui_font_file_matches(&entry.name, suffix))
+            .with_context(|| format!("字体包中缺少 UI 所需字重：{suffix}"))?;
+        selected.push(entry.clone());
+    }
+    Ok(selected)
+}
+
+fn ui_font_file_matches(entry_name: &str, suffix: &str) -> bool {
+    let Some(file_name) = font_file_name(entry_name) else {
+        return false;
+    };
+    let lower = file_name.to_ascii_lowercase();
+    lower
+        .strip_prefix("maplemono-cn-")
+        .is_some_and(|weight| weight == suffix)
+}
+
+fn cached_font_bytes(path: &Path, entry: &RemoteZipEntry) -> Result<Option<Vec<u8>>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = fs::read(path).with_context(|| format!("读取字体缓存失败：{}", path.display()))?;
+    if verify_font_bytes(&bytes, entry).is_ok() {
+        Ok(Some(bytes))
+    } else {
+        Ok(None)
+    }
+}
+
+fn download_remote_zip_entry(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    entry: &RemoteZipEntry,
+) -> Result<Vec<u8>> {
+    let header = download_range(
+        client,
+        url,
+        entry.local_header_offset,
+        entry.local_header_offset + 29,
+    )?;
+    if header.len() != 30 || &header[..4] != b"PK\x03\x04" {
+        bail!("远程字体包本地文件头损坏：{}", entry.name);
+    }
+    let name_len = read_u16(&header, 26) as u64;
+    let extra_len = read_u16(&header, 28) as u64;
+    let data_start = entry.local_header_offset + 30 + name_len + extra_len;
+    let compressed = download_range(
+        client,
+        url,
+        data_start,
+        data_start + entry.compressed_size.saturating_sub(1),
+    )?;
+    let bytes = match entry.compression_method {
+        0 => compressed,
+        8 => {
+            let mut decoder = DeflateDecoder::new(Cursor::new(compressed));
+            let mut decoded = Vec::new();
+            decoder
+                .read_to_end(&mut decoded)
+                .with_context(|| format!("解压字体文件失败：{}", entry.name))?;
+            decoded
+        }
+        method => bail!("字体文件使用不支持的 ZIP 压缩方式：{method}"),
+    };
+    verify_font_bytes(&bytes, entry)?;
+    Ok(bytes)
+}
+
+fn verify_font_bytes(bytes: &[u8], entry: &RemoteZipEntry) -> Result<()> {
+    if bytes.len() as u64 != entry.uncompressed_size {
+        bail!(
+            "字体文件大小校验失败：{}，期望 {}，实际 {}",
+            entry.name,
+            entry.uncompressed_size,
+            bytes.len()
+        );
+    }
+    let mut hasher = Crc32Hasher::new();
+    hasher.update(bytes);
+    let actual = hasher.finalize();
+    if actual != entry.crc32 {
+        bail!(
+            "字体文件 CRC32 校验失败：{}，期望 {:08x}，实际 {:08x}",
+            entry.name,
+            entry.crc32,
+            actual
+        );
+    }
+    Ok(())
+}
+
+fn install_font_file_bytes(file_name: &str, bytes: &[u8]) -> Result<()> {
     let fonts_dir = user_fonts_dir()?;
     ensure_dir(&fonts_dir)?;
-    let mut archive = ZipArchive::new(Cursor::new(zip_bytes)).context("无法读取字体压缩包")?;
-    let mut installed = 0;
-    for index in 0..archive.len() {
-        let mut entry = archive.by_index(index)?;
-        if entry.is_dir() {
-            continue;
-        }
-        let Some(file_name) = font_file_name(entry.name()) else {
-            continue;
-        };
-        let target_path = fonts_dir.join(&file_name);
-        let mut bytes = Vec::new();
-        entry
-            .read_to_end(&mut bytes)
-            .with_context(|| format!("读取字体文件失败：{file_name}"))?;
-        fs::write(&target_path, &bytes)
-            .with_context(|| format!("写入字体文件失败：{}", target_path.display()))?;
-        register_user_font(&target_path)?;
-        load_font_resource(&target_path);
-        installed += 1;
-    }
-    Ok(installed)
+    let target_path = fonts_dir.join(file_name);
+    fs::write(&target_path, bytes)
+        .with_context(|| format!("写入字体文件失败：{}", target_path.display()))?;
+    register_user_font(&target_path)?;
+    load_font_resource(&target_path);
+    Ok(())
+}
+
+fn read_u16(bytes: &[u8], offset: usize) -> u16 {
+    u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
+}
+
+fn read_u32(bytes: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+    ])
 }
 
 fn font_file_name(entry_name: &str) -> Option<String> {
@@ -448,4 +610,66 @@ fn path_to_wide(path: &Path) -> Vec<u16> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(name: &str) -> RemoteZipEntry {
+        RemoteZipEntry {
+            name: name.to_string(),
+            compression_method: 8,
+            crc32: 0,
+            compressed_size: 1,
+            uncompressed_size: 1,
+            local_header_offset: 0,
+        }
+    }
+
+    #[test]
+    fn selects_only_ui_font_weights() {
+        let entries = vec![
+            entry("MapleMono-CN-Regular.ttf"),
+            entry("MapleMono-CN-Medium.ttf"),
+            entry("MapleMono-CN-SemiBold.ttf"),
+            entry("MapleMono-CN-Bold.ttf"),
+            entry("MapleMono-CN-ExtraBold.ttf"),
+            entry("MapleMono-CN-Italic.ttf"),
+            entry("LICENSE.txt"),
+        ];
+
+        let selected = select_ui_font_entries(&entries).unwrap();
+        let names = selected
+            .into_iter()
+            .map(|entry| entry.name)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "MapleMono-CN-Regular.ttf",
+                "MapleMono-CN-Medium.ttf",
+                "MapleMono-CN-SemiBold.ttf",
+                "MapleMono-CN-Bold.ttf",
+                "MapleMono-CN-ExtraBold.ttf",
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_non_cn_or_italic_font_entries() {
+        assert!(ui_font_file_matches(
+            "MapleMono-CN-Regular.ttf",
+            "regular.ttf"
+        ));
+        assert!(!ui_font_file_matches(
+            "MapleMono-NF-CN-Regular.ttf",
+            "regular.ttf"
+        ));
+        assert!(!ui_font_file_matches(
+            "MapleMono-CN-Italic.ttf",
+            "regular.ttf"
+        ));
+    }
 }
