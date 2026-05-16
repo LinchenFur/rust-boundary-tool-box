@@ -13,7 +13,7 @@ use std::sync::{
 use serde::{Deserialize, Serialize};
 
 /// 显示在 UI 中并写入安装元数据的应用版本。
-pub const APP_VERSION: &str = "19.20.2";
+pub const APP_VERSION: &str = "19.20.3";
 /// 游戏 Boundary 的 Steam App ID。
 pub const APP_ID: &str = "1364020";
 /// 用于校验 Binaries\Win64 目录的游戏主程序。
@@ -323,9 +323,11 @@ pub(crate) mod payload;
 pub(crate) mod process;
 pub(crate) mod runtime_ops;
 pub(crate) mod steam;
+pub(crate) mod system_checks;
 pub(crate) mod util;
 
 pub use github_proxy::select_fastest_github_proxy;
 pub use installer::{normalize_github_proxy_prefix, proxied_github_url};
 pub use process::format_port_conflicts;
+pub use system_checks::{FirewallCheck, NvidiaDriverCheck, SystemCheckReport};
 pub use util::{is_running_as_administrator, now_text};

@@ -22,7 +22,8 @@ use slint::{
 
 use crate::core::{
     APP_VERSION, InstallCancelToken, InstallProgress, InstallerCore, LaunchMode, MONITORED_PORTS,
-    PathMode, PortConflict, PortStatusRow as CorePortStatusRow, format_port_conflicts,
+    PathMode, PortConflict, PortStatusRow as CorePortStatusRow, SystemCheckReport,
+    format_port_conflicts,
 };
 use crate::vnt_platform::{VntEvent, VntLaunchOptions, VntSession};
 
@@ -41,6 +42,7 @@ mod prefs;
 mod proxy_list;
 mod server_list;
 mod servers;
+mod system_checks;
 mod target;
 mod update;
 mod updates;
@@ -106,6 +108,7 @@ enum AppMessage {
         tag: String,
     },
     UpdateDownloadFailed(String),
+    SystemCheckFinished(SystemCheckReport),
     VntEvent(VntEvent),
     InstallProgress(InstallProgress),
     ActionFinished {
@@ -161,6 +164,7 @@ struct AppController {
     vnt_server_model: Rc<VecModel<VntServerRow>>,
     vnt_peer_model: Rc<VecModel<VntPeerRow>>,
     vnt_session: Option<VntSession>,
+    system_report: Option<SystemCheckReport>,
     app_prefs: AppPrefs,
     is_admin: bool,
     install_cancel: Option<InstallCancelToken>,

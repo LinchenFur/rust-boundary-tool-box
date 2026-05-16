@@ -103,6 +103,8 @@ export component SettingsPage inherits Rectangle {
     in property <string> status_text;
     in property <string> target_text;
     in property <string> process_status_text;
+    in property <string> system_status_text;
+    in property <bool> system_status_warning;
     in property <string> server_status_text;
     in property <bool> update_checking;
     in property <string> update_status_text;
@@ -249,43 +251,65 @@ export component SettingsPage inherits Rectangle {
             vertical-stretch: 1;
             radius: 26px;
 
-            VerticalLayout {
-                padding: 24px;
-                spacing: 16px;
+            ScrollView {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: self.width;
+                viewport-height: state-form.height;
 
-                TitleBlock {
-                    title: I18n.tr("详细状态", "Detailed Status", "詳細状態");
-                    sub: I18n.tr("当前目标、进程与服务状态", "Target, process, and service state", "対象、プロセス、サービス状態");
-                }
+                state-form := Rectangle {
+                    width: parent.width - 14px;
+                    height: max(690px, parent.height);
+                    background: #00000000;
 
-                DetailRow {
-                    label: I18n.tr("操作状态", "Action Status", "操作状態");
-                    value: status_text;
-                    accent: busy ? #ffb4ab : #9ef0b5;
-                }
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        padding: 24px;
+                        spacing: 16px;
 
-                DetailRow {
-                    label: I18n.tr("目标目录", "Target Path", "対象パス");
-                    value: has_target ? target_text : I18n.tr("未锁定游戏根目录", "Game root is not locked", "ゲームルート未設定");
-                    accent: has_target ? #9ef0b5 : #f6c76d;
-                }
+                        TitleBlock {
+                            title: I18n.tr("详细状态", "Detailed Status", "詳細状態");
+                            sub: I18n.tr("当前目标、进程、系统与服务状态", "Target, process, system, and service state", "対象、プロセス、システム、サービス状態");
+                        }
 
-                DetailRow {
-                    label: I18n.tr("进程状态", "Process Status", "プロセス状態");
-                    value: process_status_text;
-                    accent: #d7c4ff;
-                }
+                        DetailRow {
+                            label: I18n.tr("操作状态", "Action Status", "操作状態");
+                            value: status_text;
+                            accent: busy ? #ffb4ab : #9ef0b5;
+                        }
 
-                DetailRow {
-                    label: I18n.tr("更新状态", "Update Status", "更新状態");
-                    value: update_status_text;
-                    accent: update_checking ? #f6c76d : #62e2c1;
-                }
+                        DetailRow {
+                            label: I18n.tr("目标目录", "Target Path", "対象パス");
+                            value: has_target ? target_text : I18n.tr("未锁定游戏根目录", "Game root is not locked", "ゲームルート未設定");
+                            accent: has_target ? #9ef0b5 : #f6c76d;
+                        }
 
-                DetailRow {
-                    label: I18n.tr("服务器列表", "Server List", "サーバー一覧");
-                    value: server_status_text;
-                    accent: #a8d8ff;
+                        DetailRow {
+                            label: I18n.tr("进程状态", "Process Status", "プロセス状態");
+                            value: process_status_text;
+                            accent: #d7c4ff;
+                        }
+
+                        DetailRow {
+                            row-height: 118px;
+                            label: I18n.tr("系统检查", "System Check", "システムチェック");
+                            value: system_status_text;
+                            accent: system_status_warning ? #ffb4ab : #9ef0b5;
+                        }
+
+                        DetailRow {
+                            label: I18n.tr("更新状态", "Update Status", "更新状態");
+                            value: update_status_text;
+                            accent: update_checking ? #f6c76d : #62e2c1;
+                        }
+
+                        DetailRow {
+                            label: I18n.tr("服务器列表", "Server List", "サーバー一覧");
+                            value: server_status_text;
+                            accent: #a8d8ff;
+                        }
+                    }
                 }
             }
         }

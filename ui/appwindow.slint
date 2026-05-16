@@ -34,6 +34,8 @@ export component AppWindow inherits Window {
     in-out property <bool> auto_mode: true;
     in-out property <string> status_text: I18n.tr("准备就绪", "Ready", "準備完了");
     in-out property <string> process_status_text: I18n.tr("运行进程：未检测", "Runtime processes: not checked", "実行中プロセス: 未確認");
+    in-out property <string> system_status_text: I18n.tr("系统检查：未检测", "System check: not checked", "システムチェック: 未確認");
+    in-out property <bool> system_status_warning: false;
     in-out property <bool> show_logs: false;
     in-out property <string> log_text: "";
     in-out property <bool> busy: false;
@@ -284,6 +286,8 @@ export component AppWindow inherits Window {
                     busy: root.busy;
                     show_logs: root.page == 2 && root.show_logs;
                     process_status_text: root.process_status_text;
+                    system_status_text: root.system_status_text;
+                    system_status_warning: root.system_status_warning;
                     log_text: root.page == 2 && root.show_logs ? root.log_text : "";
                     port_rows: root.page == 2 ? root.port_rows : [];
                     detect_processes_clicked => { root.detect_processes_clicked(); }
@@ -332,6 +336,8 @@ export component AppWindow inherits Window {
                     status_text: root.status_text;
                     target_text: root.target_text;
                     process_status_text: root.process_status_text;
+                    system_status_text: root.system_status_text;
+                    system_status_warning: root.system_status_warning;
                     server_status_text: root.server_status_text;
                     update_checking: root.update_checking;
                     update_status_text: root.update_status_text;

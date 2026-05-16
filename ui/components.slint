@@ -642,8 +642,9 @@ export component DetailRow inherits Rectangle {
     in property <string> label;
     in property <string> value;
     in property <brush> accent: #62e2c1;
+    in property <length> row-height: 76px;
 
-    height: 76px;
+    height: row-height;
     border-radius: 14px;
     border-width: 1px;
     border-color: #273041;

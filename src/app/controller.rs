@@ -177,6 +177,16 @@ impl AppController {
             )
             .into(),
         );
+        ui.set_system_status_text(
+            i18n::tr(
+                language,
+                "系统检查：未检测",
+                "System check: not checked",
+                "システムチェック: 未確認",
+            )
+            .into(),
+        );
+        ui.set_system_status_warning(false);
         ui.set_show_logs(false);
         ui.set_busy(false);
         ui.set_is_admin(is_admin);
@@ -266,6 +276,7 @@ impl AppController {
             vnt_server_model,
             vnt_peer_model,
             vnt_session: None,
+            system_report: None,
             app_prefs,
             is_admin,
             install_cancel: None,
@@ -594,6 +605,7 @@ impl AppController {
         self.refresh_target_from_mode(true);
         self.start_refresh_github_proxy_list();
         self.start_refresh_servers();
+        self.start_system_check();
         if !installing_font {
             self.start_update_check(true);
         }

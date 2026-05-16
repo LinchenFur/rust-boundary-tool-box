@@ -256,6 +256,7 @@ impl AppController {
                         error
                     ));
                 }
+                AppMessage::SystemCheckFinished(report) => self.apply_system_check_report(report),
                 AppMessage::VntEvent(event) => self.apply_vnt_event(event),
                 AppMessage::ActionFinished {
                     title,

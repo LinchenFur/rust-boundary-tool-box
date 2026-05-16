@@ -195,6 +195,7 @@ impl AppController {
             self.set_vnt_peer_rows(vnt_placeholder_rows(language));
         }
 
+        self.refresh_system_status_text();
         self.sync_github_proxy_current_selection();
     }
 }

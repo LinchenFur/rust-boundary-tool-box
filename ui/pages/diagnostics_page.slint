@@ -9,6 +9,8 @@ export component DiagnosticsPage inherits Rectangle {
     in property <bool> busy;
     in property <bool> show_logs;
     in property <string> process_status_text;
+    in property <string> system_status_text;
+    in property <bool> system_status_warning;
     in property <string> log_text;
     in property <[PortRow]> port_rows;
     callback detect_processes_clicked();
@@ -40,6 +42,13 @@ export component DiagnosticsPage inherits Rectangle {
                         label: I18n.tr("进程", "PROCESS", "プロセス");
                         value: process_status_text;
                         accent: #d7c4ff;
+                    }
+
+                    InfoBox {
+                        box-height: 166px;
+                        label: I18n.tr("系统", "SYSTEM", "システム");
+                        value: system_status_text;
+                        accent: system_status_warning ? #ffb4ab : #9ef0b5;
                     }
 
                     Action {
